@@ -12,9 +12,11 @@
     "db:init": "tsx scripts/db-init.ts",
     "db:seed-chart": "tsx scripts/seed-chart-data.ts",
     "db:fetch-lyrics": "tsx scripts/fetch-lyrics.ts",
-    "py:enrich": "python3 scripts/enrich.py",
-    "py:events": "python3 scripts/build-events.py",
-    "py:graph": "python3 scripts/build-graph.py",
+    "py:enrich": "uv run --no-sync python scripts/enrich.py",
+    "py:enrich-fast": "uv run --no-sync python scripts/enrich.py --skip-embeddings --skip-gliner",
+    "py:events": "uv run --no-sync python scripts/build-events.py",
+    "py:graph": "uv run --no-sync python scripts/build-graph.py",
+    "py:similar": "uv run --no-sync python scripts/build-similar-edges.py",
     "check:env": "tsx scripts/check-env.ts"
   },
   "dependencies": {

@@ -134,6 +134,23 @@ THEME_SEEDS: dict[str, list[str]] = {
     ],
 }
 
+# Per-event-category temporal windows for song-event linking.
+# Format: (lead_in_months, echo_months). Different cultural events
+# have different temporal "reach" in music: elections are tight,
+# pandemics echo for years, social movements have long resonance.
+EVENT_TEMPORAL_WINDOWS: dict[str, tuple[int, int]] = {
+    "war":              (3, 18),
+    "pandemic":         (3, 24),
+    "social":           (6, 36),
+    "economic":         (6, 18),
+    "political":        (3, 6),
+    "sports":           (3, 3),
+    "tech":             (6, 12),
+    "natural_disaster": (3, 6),
+    "cultural":         (6, 12),
+}
+
+
 # Mood proxy lexicon (until Cyanite is integrated).
 MOOD_LEXICON: dict[str, list[str]] = {
     "melancholic": ["alone", "lonely", "crying", "tears", "sad", "empty", "miss you", "numb", "lost", "broken", "goodbye", "fade", "somber"],
@@ -223,8 +240,12 @@ def init_gliner() -> object | None:
         return None
     try:
         from gliner import GLiNER
-        model = GLiNER.from_pretrained("urchade/gliner_medium-v2.1")
-        return model
+        # Per 0.9 (routing rule), the model name is recorded on every
+        # entity_mentions row. Bump LIB_NER_LABELS_VERSION when the
+        # label taxonomy changes; the model_version on new rows
+        # reflects both the model and the labels version.
+        from lib.nlp.ner_labels import LABELS_VERSION  # type: ignore
+        return GLiNER.from_pretrained("urchade/gliner_medium-v2.1"), LABELS_VERSION
     except Exception as err:  # noqa: BLE001
         print(f"  · GLiNER unavailable: {err}", file=sys.stderr)
         return None
@@ -352,24 +373,29 @@ def run_ner(p: Pipeline, lyrics: str) -> list[dict]:
         return out
     lines = [l.strip() for l in lyrics.splitlines() if l.strip()]
     if p.gliner is not None:
-        labels = [
-            "person", "artist", "musician", "band",
-            "place", "city", "country",
-            "brand", "religious figure", "political figure",
-            "song title", "album title", "drug", "weapon",
-            "technology", "vehicle",
-        ]
+        # The Pipeline now stores (gliner, labels_version) tuple in p.gliner
+        # (or just the model in older runs). Normalize.
+        gliner_model = p.gliner[0] if isinstance(p.gliner, tuple) else p.gliner
+        labels_version = p.gliner[1] if isinstance(p.gliner, tuple) else "unknown"
+        from lib.nlp.ner_labels import NER_LABELS, get_threshold, DEFAULT_NER_THRESHOLD  # type: ignore
         try:
             for line in lines:
-                preds = p.gliner.predict_entities(line, labels, threshold=0.5)
+                # Per-label thresholds; use the highest per-label threshold
+                # that matches the line's predicted label.
+                preds = gliner_model.predict_entities(line, NER_LABELS, threshold=DEFAULT_NER_THRESHOLD)
                 for ent in preds:
+                    label = ent.get("label", "person").lower()
+                    score = float(ent.get("score", 0.7))
+                    if score < get_threshold(label):
+                        continue
                     out.append({
                         "text": ent.get("text", ""),
-                        "label": ent.get("label", "person").lower(),
+                        "label": label,
                         "start": ent.get("start", 0),
                         "end": ent.get("end", 0),
                         "source": "gliner",
-                        "confidence": float(ent.get("score", 0.7)),
+                        "confidence": score,
+                        "labels_version": labels_version,
                     })
         except Exception as err:  # noqa: BLE001
             print(f"  · GLiNER predict failed: {err}", file=sys.stderr)
@@ -439,20 +465,47 @@ def link_song_to_event(
     event_vec: list[float] | None,
     theme_centroids: dict[str, list[float]],
     embedder,
-) -> tuple[float, list[str], str, list[dict]] | None:
-    """Compute (strength, matched_terms, link_type, evidence_lines). Returns None if too weak."""
+) -> tuple[float, list[str], str, list[dict], str, int, int] | None:
+    """Compute (strength, matched_terms, link_type, evidence_lines, bucket, song_year, event_year).
+
+    Returns None if no temporal overlap or insufficient thematic signal.
+
+    The temporal check is per-event-category (see EVENT_TEMPORAL_WINDOWS):
+      - core: song_year ∈ [event_start_year, event_end_year]
+      - lead_in: song_year < start, within lead_in window
+      - echo: song_year > end, within echo window
+      - none: outside the windows → return None
+    """
     keywords = json.loads(event["keywords_json"] or "[]")
     related_themes = json.loads(event["related_themes_json"] or "[]")
 
-    if not (song_year == int(event["start_date"][:4]) or
-            (event["start_date"][:4] <= str(song_year) <= (event["end_date"] or event["start_date"])[:4])):
-        # Chart year doesn't overlap event window (within ±1 yr for boundary events)
-        year_lo = int(event["start_date"][:4]) - 1
-        year_hi = int((event["end_date"] or event["start_date"])[:4]) + 1
-        if not (year_lo <= song_year <= year_hi):
-            return None
+    # --- Temporal gate (per event category) ---
+    start_year = int(event["start_date"][:4])
+    end_year = int((event["end_date"] or event["start_date"])[:4])
+    category = event["category"]
+    lead_in_months, echo_months = EVENT_TEMPORAL_WINDOWS.get(category, (3, 6))
 
-    # Term overlap
+    if start_year <= song_year <= end_year:
+        temporal_score = 1.0
+        bucket = "core"
+    elif song_year < start_year:
+        gap_months = (start_year - song_year) * 12
+        if gap_months > lead_in_months:
+            return None
+        # Linear decay from 0.8 at 0 months to 0.4 at lead_in_months
+        temporal_score = 0.8 - (gap_months / lead_in_months) * 0.4
+        bucket = "lead_in"
+    elif song_year > end_year:
+        gap_months = (song_year - end_year) * 12
+        if gap_months > echo_months:
+            return None
+        # Linear decay from 0.8 at 0 months to 0.4 at echo_months
+        temporal_score = 0.8 - (gap_months / echo_months) * 0.4
+        bucket = "echo"
+    else:
+        return None
+
+    # --- Thematic gate ---
     matched = []
     for theme, (_score, terms) in lexicon_hits.items():
         if theme in related_themes:
@@ -467,20 +520,18 @@ def link_song_to_event(
             theme_score += lexicon_hits[theme][0]
     theme_score = theme_score / max(1, len(related_themes))
 
-    # Embedding similarity
+    # --- Embedding similarity (optional) ---
     emb_sim = 0.0
     if embedder is not None and song_vec is not None and event_vec is not None:
         emb_sim = max(0.0, cosine(song_vec, event_vec))
-    elif embedder is not None:
-        # Try a quick embed of the event description
-        if "embedding" in str(event.keys()):
-            pass
-    # Composite strength (0..1)
-    strength = min(1.0, 0.4 * min(1.0, len(set(matched)) / 8) + 0.4 * min(1.0, theme_score / 5) + 0.2 * emb_sim)
+
+    # --- Composite strength: temporal acts as a multiplier ---
+    raw = 0.5 * min(1.0, len(set(matched)) / 8) + 0.3 * min(1.0, theme_score / 5) + 0.2 * emb_sim
+    strength = round(min(1.0, raw * temporal_score), 4)
     if strength < 0.2:
         return None
 
-    # Pull a couple of evidence lines that contain the matched terms.
+    # --- Evidence lines (lyric lines containing matched terms) ---
     evidence_lines: list[dict] = []
     for row in conn.execute(
         "SELECT line_index, text FROM lyric_lines WHERE song_id = ? ORDER BY line_index LIMIT 600",
@@ -493,14 +544,15 @@ def link_song_to_event(
                 break
     evidence_lines = evidence_lines[:5]
 
+    # Link type — explicit, evidence-graded
     link_type = "theme_overlap"
-    if emb_sim > 0.6:
+    if emb_sim > 0.6 and bucket == "core":
         link_type = "emotional_alignment"
     if any(t in {"war_conflict", "violence", "social_unrest", "protest"} for t in related_themes):
         if strength > 0.6:
             link_type = "emotional_shadow"
 
-    return strength, sorted(set(matched)), link_type, evidence_lines
+    return strength, sorted(set(matched)), link_type, evidence_lines, bucket, song_year, start_year
 
 
 def build_event_embeddings(p: Pipeline, events: list[sqlite3.Row]) -> dict[str, list[float]]:
@@ -520,6 +572,10 @@ def main() -> int:
     parser.add_argument("--skip-embeddings", action="store_true")
     parser.add_argument("--song-id", default=None, help="Limit enrichment to a single song id")
     parser.add_argument("--limit", type=int, default=0, help="Limit songs (debug)")
+    parser.add_argument("--skip-gliner", action="store_true",
+                        help="Skip GLiNER NER even if the model loads (faster re-runs when only themes/events are needed)")
+    parser.add_argument("--only-missing-embeddings", action="store_true",
+                        help="Process only songs that have lyrics but no embedding (P7.1: post-lyrics-fetch fix)")
     args = parser.parse_args()
 
     conn = open_db()
@@ -540,6 +596,23 @@ def main() -> int:
         songs = [s for s in songs if s["id"] == args.song_id]
     if args.limit:
         songs = songs[: args.limit]
+    if args.only_missing_embeddings:
+        # P7.1: re-run only for songs that have lyrics but no
+        # embedding. Closes the gap surfaced when the lyrics-fetch
+        # artist fix recovered 3 songs after the last full enrich.
+        before = len(songs)
+        songs = [
+            s for s in songs
+            if conn.execute(
+                "SELECT 1 FROM lyric_lines WHERE song_id = ? LIMIT 1",
+                (s["id"],),
+            ).fetchone()
+            and not conn.execute(
+                "SELECT 1 FROM embeddings WHERE target_type='song' AND target_id = ?",
+                (s["id"],),
+            ).fetchone()
+        ]
+        print(f"  · --only-missing-embeddings: filtered {before} → {len(songs)}")
     print(f"→ Enriching {len(songs)} songs, {len(events)} events")
 
     t0 = time.time()
@@ -603,7 +676,10 @@ def main() -> int:
                 )
 
         # NER → entity_mentions + graph edges
-        ents = run_ner(Pipeline(conn, embedder, gliner, spacy_nlp, dim, theme_centroids, model_version), lyrics)
+        if args.skip_gliner:
+            ents = []
+        else:
+            ents = run_ner(Pipeline(conn, embedder, gliner, spacy_nlp, dim, theme_centroids, model_version), lyrics)
         seen_ents: set[str] = set()
         for ent in ents:
             eid = upsert_entity(conn, ent)
@@ -646,7 +722,12 @@ def main() -> int:
                     float(ent["confidence"]),
                     json.dumps([ev_id]),
                     ent["source"],
-                    model_version if ent["source"] != "gliner" else "gliner_medium-v2.1",
+                    # Per 0.9: model_version encodes both the model and
+                    # the label taxonomy used to produce the row. When
+                    # the labels change, bump LABELS_VERSION in
+                    # lib/nlp/ner_labels.py.
+                    f"urchade/gliner_medium-v2.1+labels-{ent.get('labels_version', 'unknown')}"
+                    if ent["source"] == "gliner" else model_version,
                     f"NER detected '{ent['text']}' ({ent['label']}) in lyrics.",
                 ),
             )
@@ -675,7 +756,7 @@ def main() -> int:
                 )
                 if not link:
                     continue
-                strength, matched_terms, link_type, evidence_lines = link
+                strength, matched_terms, link_type, evidence_lines, bucket, _sy, ev_start = link
                 edge_id = f"versesignal:e:{song_id}:event:{ev['id']}:{link_type}"
                 song_node = f"versesignal:n:song:{song_id}"
                 ev_node = f"versesignal:n:event:{ev['id']}"
@@ -685,7 +766,7 @@ def main() -> int:
                 )
                 ev_ids: list[str] = []
                 explanation_parts = [
-                    f"Event window overlaps song year ({song['year']}).",
+                    f"Temporal bucket: {bucket} (song {song['year']}, event start {ev_start}).",
                     f"Matched terms: {', '.join(matched_terms[:6])}.",
                     f"Link type: {link_type}.",
                 ]

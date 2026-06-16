@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import type { GraphEdge, GraphNode, Evidence } from "@/lib/types";
 import { EvidenceDrawer } from "@/components/evidence/evidence-drawer";
+import { PathPanel } from "@/components/graph/path-panel";
 import { Pill } from "@/components/ui/primitives";
 
 const GraphView = dynamic(() => import("@/components/graph/graph-view").then((m) => m.GraphView), {
@@ -167,12 +168,18 @@ function GraphExplorer() {
             </div>
           ) : null}
         </div>
-        <EvidenceDrawer
-          edge={selectedEdge}
-          evidence={evidence}
-          onClose={() => setSelectedEdge(null)}
-        />
+        <div className="space-y-4">
+          <EvidenceDrawer
+            edge={selectedEdge}
+            evidence={evidence}
+            onClose={() => setSelectedEdge(null)}
+          />
+        </div>
       </div>
+
+      <section className="mt-8">
+        <PathPanel />
+      </section>
     </main>
   );
 }

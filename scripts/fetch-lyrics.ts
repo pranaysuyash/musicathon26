@@ -34,19 +34,49 @@ async function findTrack(title: string, artist: string): Promise<MXMTrack | null
   const cleanedArtist = cleanArtist(artist);
   const cleanedTitle = cleanTitle(title);
   try {
+    // First try title + artist
     const direct = await searchTrack(`${cleanedTitle} ${cleanedArtist}`, 5);
-    if (direct.length > 0) return direct[0]!;
-    // Fallback: title only
+    // Per 0.6 blast-radius + 0.10 observability: verify the artist
+    // name actually matches the result before accepting. Previously
+    // this script took `direct[0]` blindly, which is why songs like
+    // "Meant to Be" (Bebe Rexha) and "The Middle" (Zedd) ended up
+    // with identical wrong lyrics.
+    const verified = direct.find((t) => artistMatches(t.artist_name, cleanedArtist));
+    if (verified) return verified;
+    // Fallback: title only, but also with artist verification
     const loose = await searchTrack(cleanedTitle, 5);
-    const match = loose.find(
-      (t) => t.artist_name.toLowerCase().includes(cleanedArtist.toLowerCase()) ||
-             cleanedArtist.toLowerCase().includes(t.artist_name.toLowerCase())
-    );
-    return match ?? loose[0] ?? null;
+    const match = loose.find((t) => artistMatches(t.artist_name, cleanedArtist));
+    if (match) return match;
+    // Last resort: take the top result with a warning so the
+    // data-quality guard in build-similar-edges.py can catch it.
+    console.warn(`  ! no artist match for "${title}" — ${cleanedArtist}; using top result (${direct[0]?.artist_name ?? loose[0]?.artist_name ?? "?"})`);
+    return direct[0] ?? loose[0] ?? null;
   } catch (err) {
     console.warn(`  search failed for "${title}" — ${cleanedArtist}: ${(err as Error).message}`);
     return null;
   }
+}
+
+// True if the Musixmatch result's artist name matches the
+// cleanedArtist we expected. Uses bidirectional substring match
+// so "Drake" matches "Drake" or "Aubrey Drake Graham", and
+// "Bebe Rexha" matches "Bebe Rexha featuring Florida Georgia Line"
+// (we accept the prefix).
+function artistMatches(foundArtist: string, expected: string): boolean {
+  const f = foundArtist.toLowerCase().trim();
+  const e = expected.toLowerCase().trim();
+  if (!f || !e) return false;
+  if (f === e) return true;
+  // Split on "feat./ft./&/and/with" so "Drake" matches "Drake feat. X"
+  const fPrimary = f.split(/\s+(?:feat\.?|featuring|ft\.?|&|\band\b|\bwith\b)\b/i)[0]!.trim();
+  const ePrimary = e.split(/\s+(?:feat\.?|featuring|ft\.?|&|\band\b|\bwith\b)\b/i)[0]!.trim();
+  if (!fPrimary || !ePrimary) return false;
+  if (fPrimary === ePrimary) return true;
+  // Allow prefix if one is fully contained in the other
+  if (fPrimary.includes(ePrimary) || ePrimary.includes(fPrimary)) {
+    return fPrimary.length >= 2 && ePrimary.length >= 2;
+  }
+  return false;
 }
 
 function splitLines(lyrics: string): { text: string; section: string | null }[] {
