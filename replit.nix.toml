@@ -1,0 +1,16 @@
+// VerseSignal — Musicathon 2026 entry
+// https://musicathon.musixmatch.com
+
+run = "npm run start"
+
+[env]
+# All partner keys injected as Replit secrets; sample names below.
+# MUSIXMATCH_API_KEY, MUSIXMATCH_PASSWORD,
+# SONGSTATS_API_KEY, ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID,
+# HF_TOKEN, JAMBASE_API_KEY, CYANITE_API_KEY, LALAL_AI_API_KEY
+
+[nix]
+channel = "stable"
+
+[build]
+buildCommand = "npm install && npm run db:init && npm run db:seed-chart"

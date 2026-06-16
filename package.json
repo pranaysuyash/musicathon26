@@ -1,0 +1,53 @@
+{
+  "name": "versesignal",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "db:init": "tsx scripts/db-init.ts",
+    "db:seed-chart": "tsx scripts/seed-chart-data.ts",
+    "db:fetch-lyrics": "tsx scripts/fetch-lyrics.ts",
+    "py:enrich": "python3 scripts/enrich.py",
+    "py:events": "python3 scripts/build-events.py",
+    "py:graph": "python3 scripts/build-graph.py",
+    "check:env": "tsx scripts/check-env.ts"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.1.1",
+    "d3": "^7.9.0",
+    "drizzle-orm": "^0.33.0",
+    "elevenlabs": "^1.59.0",
+    "framer-motion": "^11.3.0",
+    "lucide-react": "^0.414.0",
+    "next": "^14.2.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-force-graph-2d": "^1.25.5",
+    "server-only": "^0.0.1",
+    "tailwind-merge": "^2.4.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/d3": "^7.4.3",
+    "@types/node": "^20.14.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "autoprefixer": "^10.4.19",
+    "dotenv": "^17.4.2",
+    "drizzle-kit": "^0.24.0",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "^14.2.5",
+    "postcss": "^8.4.39",
+    "tailwindcss": "^3.4.6",
+    "tsx": "^4.16.0",
+    "typescript": "^5.5.0"
+  }
+}

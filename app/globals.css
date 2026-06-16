@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg: #060609;
+    --bg-elev: #0c0c10;
+    --bg-card: #14141a;
+    --border: #1f1f29;
+    --border-strong: #2d2d33;
+    --text: #eeeef0;
+    --text-muted: #85858d;
+  }
+  html, body {
+    @apply bg-ink-950 text-ink-100 antialiased;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+  body {
+    background: radial-gradient(ellipse at top, rgba(14, 165, 233, 0.04) 0%, transparent 60%),
+                radial-gradient(ellipse at bottom right, rgba(217, 70, 239, 0.03) 0%, transparent 50%),
+                #060609;
+    min-height: 100vh;
+  }
+  ::selection {
+    background: rgba(14, 165, 233, 0.3);
+  }
+}
+
+@layer utilities {
+  .text-balance { text-wrap: balance; }
+  .text-pretty { text-wrap: pretty; }
+  .glow {
+    box-shadow: 0 0 0 1px rgba(125, 211, 252, 0.12),
+                0 0 24px -8px rgba(14, 165, 233, 0.4);
+  }
+  .stripes {
+    background-image: repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 8px,
+      rgba(255, 255, 255, 0.04) 8px,
+      rgba(255, 255, 255, 0.04) 16px
+    );
+  }
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: #2d2d33 transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+  .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { background: #2d2d33; border-radius: 3px; }
+}
+
+@layer components {
+  .pill {
+    @apply inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium;
+  }
+  .pill-signal { @apply border-signal-700/40 bg-signal-900/30 text-signal-200; }
+  .pill-echo { @apply border-echo-700/40 bg-echo-900/30 text-echo-200; }
+  .pill-warn { @apply border-warn-500/40 bg-warn-500/10 text-warn-500; }
+  .pill-mute { @apply border-ink-700 bg-ink-800/60 text-ink-300; }
+  .card {
+    @apply rounded-xl border border-ink-800 bg-ink-900/60 backdrop-blur-sm;
+  }
+  .card-hover {
+    @apply transition-all hover:border-ink-700 hover:bg-ink-900/80;
+  }
+  .h-display { @apply font-display tracking-tight text-balance; }
+  .gradient-text {
+    background: linear-gradient(120deg, #f0abfc 0%, #7dd3fc 50%, #34d399 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+}

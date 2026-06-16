@@ -1,0 +1,273 @@
+{
+  "themes": {
+    "love": {
+      "label": "Love",
+      "color": "#f0abfc",
+      "description": "Romantic affection, intimacy, devotion, partnership.",
+      "terms": [
+        "love", "loved", "loving", "lover", "in love", "falling in love", "heart",
+        "kiss", "kissing", "hold me", "hold you", "touch", "touching",
+        "baby", "darling", "honey", "sweetheart", "soulmate",
+        "forever", "always", "yours", "mine", "two hearts", "in love with you",
+        "love you", "i love you", "love is", "love was", "love me", "love me like"
+      ]
+    },
+    "heartbreak": {
+      "label": "Heartbreak",
+      "color": "#a78bfa",
+      "description": "Romantic loss, betrayal, separation, regret.",
+      "terms": [
+        "broke my heart", "heartbroken", "breakup", "broke up", "goodbye",
+        "left me", "lost you", "miss you", "missing you", "goodbye my lover",
+        "tears", "crying", "cried", "alone without you", "we're through",
+        "i can't forget", "moving on", "never again", "used to love",
+        "i'm not over you", "still think about you", "ex", "liar", "cheated",
+        "my heart", "give you up"
+      ]
+    },
+    "war_conflict": {
+      "label": "War & Conflict",
+      "color": "#ef4444",
+      "description": "Battles, soldiers, violence, geopolitical conflict.",
+      "terms": [
+        "war", "soldier", "battle", "fight", "fighting", "warrior", "enemy",
+        "weapon", "gun", "bullet", "bomb", "blood", "wound", "wounded",
+        "army", "troops", "frontline", "trench", "warzone", "war zone",
+        "kill", "killing", "dying", "death", "die for", "sacrifice",
+        "sniper", "mortar", "tank", "missile", "refugee", "civil war",
+        "invasion", "occupation", "ceasefire", "casualty", "freedom",
+        "liberation", "resistance", "warzone", "marching", "battlefield"
+      ]
+    },
+    "protest": {
+      "label": "Protest",
+      "color": "#f59e0b",
+      "description": "Resistance, social movements, demands for change.",
+      "terms": [
+        "protest", "protests", "revolt", "revolution", "resist", "resistance",
+        "fight for", "stand up", "no justice", "no peace", "say their names",
+        "black lives", "blm", "power to the people", "fired up", "fight the power",
+        "we the people", "voices", "march", "marches", "demonstrate",
+        "take the streets", "raise your voice", "speak out", "silence is",
+        "they will not", "we will not", "no more", "still we rise",
+        "injustice", "oppression", "freedom", "free the", "abolish"
+      ]
+    },
+    "money_status": {
+      "label": "Money & Status",
+      "color": "#10b981",
+      "description": "Wealth, flex, ambition, social climbing.",
+      "terms": [
+        "money", "cash", "dollars", "bills", "rack", "racks", "bands",
+        "rich", "wealthy", "fancy", "whip", "foreign", "wraith", "bentley",
+        "rolex", "diamonds", "gold", "ice", "chain", "rings", "gucci",
+        "versace", "prada", "chanel", "louboutin", "bought my", "ballin",
+        "stacks", "make it rain", "broker", "boss", "ceo", "hustle",
+        "grind", "pay me", "get paid", "rich bitch", "expensive",
+        "credit card", "rich", "broke", "broke ass", "debt", "rent"
+      ]
+    },
+    "faith": {
+      "label": "Faith & Spirituality",
+      "color": "#06b6d4",
+      "description": "Religion, prayer, transcendence, the sacred.",
+      "terms": [
+        "god", "jesus", "allah", "yahweh", "lord", "heaven", "hell",
+        "pray", "prayer", "praying", "amen", "hallelujah", "holy",
+        "spirit", "soul", "divine", "blessed", "blessing", "faith",
+        "believe", "believer", "savior", "saviour", "church", "temple",
+        "mosque", "worship", "grace", "mercy", "forgive", "forgiveness",
+        "sin", "sinner", "repent", "salvation", "redeemed", "covenant",
+        "kingdom", "glory", "resurrection", "miracle", "baptize"
+      ]
+    },
+    "home": {
+      "label": "Home & Belonging",
+      "color": "#84cc16",
+      "description": "Home, family, roots, place, belonging.",
+      "terms": [
+        "home", "house", "household", "homestead", "homeland", "homie",
+        "neighborhood", "street", "streets", "block", "porch", "yard",
+        "kitchen", "bedroom", "front door", "doorstep", "roots", "family",
+        "mother", "father", "mom", "dad", "mama", "papa", "son", "daughter",
+        "brother", "sister", "cousin", "auntie", "uncle", "grandma",
+        "grandpa", "raise me", "raised me", "grew up", "back home",
+        "hometown", "native", "native land", "country road", "small town",
+        "suburb", "city", "the city", "ghetto", "hood", "projects"
+      ]
+    },
+    "loneliness": {
+      "label": "Loneliness & Isolation",
+      "color": "#475569",
+      "description": "Aloneness, isolation, being unseen.",
+      "terms": [
+        "alone", "lonely", "loneliness", "isolated", "isolation", "solo",
+        "by myself", "on my own", "no one", "nobody", "empty", "void",
+        "numb", "hollow", "miss me", "invisible", "ghost", "ghosts",
+        "silence", "silent", "quiet", "no one's there", "distant",
+        "far away", "out of reach", "forgotten", "alone tonight",
+        "sitting alone", "my room", "four walls", "i wish you were here",
+        "quarantine", "stay inside", "stay home", "six feet", "shut in"
+      ]
+    },
+    "escape_party": {
+      "label": "Escape & Party",
+      "color": "#eab308",
+      "description": "Celebration, nightlife, escapism, release.",
+      "terms": [
+        "party", "club", "clubs", "dj", "dj play my song", "dance", "dancing",
+        "tonight", "tonite", "all night", "til sunrise", "til the morning",
+        "drink", "drinks", "drinking", "shots", "shot", "tipsy", "wasted",
+        "high", "stoned", "lit", "turn up", "turnup", "get wild", "go crazy",
+        "lose control", "lose myself", "no worries", "no stress", "fun",
+        "weekend", "saturday", "friday", "summer", "beach", "pool",
+        "fiesta", "festival", "rave", "music loud", "blast", "speakers",
+        "escape", "getaway", "runaway", "leave it all behind", "forget"
+      ]
+    },
+    "violence": {
+      "label": "Violence & Danger",
+      "color": "#dc2626",
+      "description": "Threat, harm, danger, menace.",
+      "terms": [
+        "gun", "guns", "shoot", "shooting", "shot", "kill", "killing",
+        "stab", "stabbing", "slit", "throat", "strangle", "choke",
+        "knife", "knives", "blood", "bloody", "dead", "death", "die",
+        "wound", "scar", "scars", "wound up", "fight", "fighting",
+        "punch", "kick", "beat", "beating", "bruise", "hurt", "hurting",
+        "pain", "painful", "suffocate", "drown", "burn", "burning",
+        "fire", "flame", "flames", "smoke", "smoking", "rage", "violent"
+      ]
+    },
+    "migration": {
+      "label": "Migration & Travel",
+      "color": "#0891b2",
+      "description": "Movement, leaving, journey, diaspora, border crossing.",
+      "terms": [
+        "leave", "leaving", "left", "gone", "go", "go away", "run",
+        "running", "flee", "fleeing", "escape", "exile", "exiled",
+        "refugee", "asylum", "border", "borderline", "frontier",
+        "passport", "visa", "homeland", "foreign", "abroad", "overseas",
+        "travel", "traveling", "wander", "nomad", "migrate", "migration",
+        "settle", "displaced", "crossing", "south of the border", "north",
+        "caravan", "back home", "going home", "journey", "voyage",
+        "train", "airplane", "highway", "interstate", "by the road"
+      ]
+    },
+    "technology": {
+      "label": "Technology & Media",
+      "color": "#6366f1",
+      "description": "Digital life, screens, online, AI, internet culture.",
+      "terms": [
+        "phone", "phones", "cell phone", "smartphone", "iphone", "android",
+        "screen", "screens", "tiktok", "instagram", "insta", "snap",
+        "snapchat", "twitter", "x.com", "facebook", "youtube", "stream",
+        "streaming", "playlist", "algorithm", "viral", "meme", "memes",
+        "trending", "followers", "dm", "dms", "text me", "texting",
+        "wifi", "signal", "loading", "buffering", "offline", "online",
+        "avatar", "ai", "chatgpt", "gpt", "bot", "code", "coding",
+        "zoom", "video call", "facetime", "airpods", "earbuds"
+      ]
+    },
+    "fame": {
+      "label": "Fame & Celebrity",
+      "color": "#facc15",
+      "description": "Stardom, public life, scrutiny, success.",
+      "terms": [
+        "famous", "fame", "celebrity", "celebrities", "star", "stars",
+        "spotlight", "paparazzi", "tabloid", "rumor", "rumors", "viral",
+        "trending", "million", "billions", "rich", "richest", "top",
+        "number one", "billboard", "grammy", "award", "red carpet",
+        "magazine", "cover", "interview", "press", "fans", "fan",
+        "stan", "army", "swiftie", "beliebers", "beyhive", "bts army",
+        "bigger than", "iconic", "legend", "legacy", "hall of fame"
+      ]
+    },
+    "identity": {
+      "label": "Identity & Self",
+      "color": "#a855f7",
+      "description": "Self, becoming, who I am, pronouns, intersection.",
+      "terms": [
+        "who i am", "i am", "i'm", "myself", "my identity", "be yourself",
+        "be who", "authentic", "true self", "true me", "real me", "real",
+        "black", "white", "brown", "latino", "latina", "latine", "asian",
+        "indigenous", "native", "queer", "gay", "lesbian", "bi", "trans",
+        "nonbinary", "woman", "women", "man", "men", "girl", "boy",
+        "gender", "pronouns", "she her", "he him", "they them",
+        "fitting in", "belong", "don't belong", "outsider", "other",
+        "different", "weird", "strange", "embrace", "outcast"
+      ]
+    },
+    "grief": {
+      "label": "Grief & Loss",
+      "color": "#0f172a",
+      "description": "Mourning, bereavement, memory of the lost.",
+      "terms": [
+        "miss you", "i miss", "gone too soon", "rest in peace", "rip",
+        "funeral", "burial", "grave", "headstone", "memorial", "memory",
+        "memories", "remember", "in memory", "always remember",
+        "never forget", "loss", "lost you", "losing you", "tears",
+        "crying", "wept", "sob", "mourn", "mourning", "longing",
+        "if only", "i wish", "should have", "could have", "would have",
+        "too soon", "last time", "goodbye for good", "goodbye my love"
+      ]
+    },
+    "hope": {
+      "label": "Hope & Resilience",
+      "color": "#fde047",
+      "description": "Optimism, recovery, faith in the future.",
+      "terms": [
+        "hope", "hopeful", "sunshine", "sunrise", "tomorrow", "new day",
+        "new beginning", "better days", "this too shall pass", "we'll be ok",
+        "we'll be okay", "still standing", "rise", "rising", "stand up",
+        "don't give up", "keep going", "hold on", "keep holding on",
+        "fight for", "hold fast", "we can", "we will", "we are", "together",
+        "we rise", "we got this", "light at the end", "tunnel", "brighter",
+        "future", "looking up", "good things", "healing", "recover",
+        "survive", "survivor", "survived", "strong", "stronger", "strength"
+      ]
+    },
+    "national_pride": {
+      "label": "National Pride",
+      "color": "#ef4444",
+      "description": "Patriotism, flag, nation, country identity.",
+      "terms": [
+        "country", "america", "american", "usa", "united states",
+        "u.s.a.", "stars and stripes", "stars", "stripes", "flag",
+        "patriot", "patriotic", "patriotism", "national anthem", "anthem",
+        "land of the free", "home of the brave", "freedom", "liberty",
+        "uk", "britain", "england", "scotland", "ireland", "wales",
+        "india", "indian", "hindustan", "bharat", "japan", "japanese",
+        "korea", "korean", "china", "chinese", "mexico", "mexican",
+        "canada", "canadian", "australia", "australian", "native land"
+      ]
+    },
+    "social_unrest": {
+      "label": "Social Unrest",
+      "color": "#fb923c",
+      "description": "Tension, riots, divide, social rupture.",
+      "terms": [
+        "riot", "riots", "rioting", "looting", "unrest", "uprising",
+        "tension", "tensions", "fight the power", "burn it down",
+        "burn it all", "tear it down", "tear down", "march", "marches",
+        "demonstration", "protest", "protests", "clash", "clashes",
+        "tear gas", "rubber bullet", "police", "cops", "fbi", "swat",
+        "back the blue", "defund", "abolish", "occupy", "occupy wall street",
+        "no justice", "no peace", "revolution", "insurrection", "coup"
+      ]
+    },
+    "nostalgia": {
+      "label": "Nostalgia",
+      "color": "#94a3b8",
+      "description": "Memory, past, longing for what was.",
+      "terms": [
+        "remember", "remember when", "i remember", "used to", "back then",
+        "old days", "good old days", "the way we were", "those days",
+        "childhood", "growing up", "grew up", "reminisce", "reminiscing",
+        "throwback", "way back", "long ago", "once upon", "way back when",
+        "yesterday", "the past", "olden days", "nostalgia", "nostalgic",
+        "rewind", "rewinding", "blast from the past", "old school", "retro"
+      ]
+    }
+  }
+}

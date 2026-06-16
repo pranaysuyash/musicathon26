@@ -1,0 +1,59 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+
+# Build / runtime
+dist/
+build/
+.next/
+out/
+.tsbuildinfo
+*.tsbuildinfo
+next-env.d.ts
+
+# Replit
+.replit
+.replit.nix
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Env (NEVER commit partner API keys)
+.env
+.env.local
+.env.*.local
+
+# Runtime data — rebuild with `npm run db:init && npm run db:seed-chart && python3 scripts/enrich.py`
+# The SQLite DB holds Musixmatch-licensed lyrics, so it stays out of git.
+data/
+# ...except the hand-curated chart seed (source code, no licensing issue)
+!data/chart-seed.ts
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.cursor/
+
+# Agent-start compatibility mirror (regenerated each session; canonical is docs/context/agent-start/)
+.agent/
