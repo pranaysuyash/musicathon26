@@ -6,8 +6,9 @@
 
 import "dotenv/config";
 import { closeDb, getDb, initDb } from "../lib/db";
-import { all, get } from "../lib/db/sql";
+import { all } from "../lib/db/sql";
 import { searchTrack, ingestTrack, type MXMTrack } from "../lib/api/musixmatch";
+import { fetchLyricsFromGenius, isGeniusAvailable } from "../lib/api/genius";
 
 const DELAY_MS = 400;
 
@@ -21,6 +22,14 @@ interface SongRow {
 }
 
 interface SongIdRow { song_id: string }
+
+type LyricSource = "musixmatch" | "genius";
+
+interface LyricFetchResult {
+  source: LyricSource;
+  plainLyrics: string;
+  musixmatchTrackId?: number;
+}
 
 function cleanArtist(s: string): string {
   return s.replace(/\s+(?:feat\.?|featuring|ft\.?|&|and|with)\b.*$/i, "").trim();
@@ -55,6 +64,33 @@ async function findTrack(title: string, artist: string): Promise<MXMTrack | null
     console.warn(`  search failed for "${title}" — ${cleanedArtist}: ${(err as Error).message}`);
     return null;
   }
+}
+
+async function fetchLyricsWithFallback(title: string, artist: string): Promise<LyricFetchResult | null> {
+  const track = await findTrack(title, artist);
+  if (track) {
+    try {
+      const ingested = await ingestTrack(track.track_id);
+      if (ingested.plainLyrics) {
+        return {
+          source: "musixmatch",
+          musixmatchTrackId: track.track_id,
+          plainLyrics: ingested.plainLyrics,
+        };
+      }
+    } catch (err) {
+      console.warn(`  musixmatch ingest failed: ${(err as Error).message}`);
+    }
+  }
+
+  if (!isGeniusAvailable()) return null;
+  const fallback = await fetchLyricsFromGenius(title, artist);
+  if (!fallback?.plainLyrics) return null;
+
+  return {
+    source: "genius",
+    plainLyrics: fallback.plainLyrics,
+  };
 }
 
 // True if the Musixmatch result's artist name matches the
@@ -125,27 +161,30 @@ async function main() {
   for (let i = 0; i < targets.length; i++) {
     const s = targets[i]!;
     process.stdout.write(`[${i + 1}/${targets.length}] ${s.year} · ${s.artist} — ${s.title}\n`);
-    const track = await findTrack(s.title, s.artist);
-    if (!track) {
+    const fetched = await fetchLyricsWithFallback(s.title, s.artist);
+    if (!fetched) {
       fail++;
       await sleep(DELAY_MS);
       continue;
     }
-    if (!track.has_lyrics) {
+    if (fetched.source === "musixmatch") {
+      const trackId = fetched.musixmatchTrackId;
+      if (!trackId) {
+        fail++;
+        await sleep(DELAY_MS);
+        continue;
+      }
+      insertTrackId.run(trackId, s.id);
+    }
+
+    if (!fetched.plainLyrics) {
       process.stdout.write(`  · no lyrics available\n`);
       restricted++;
       await sleep(DELAY_MS);
       continue;
     }
     try {
-      const ingested = await ingestTrack(track.track_id);
-      if (!ingested.plainLyrics) {
-        restricted++;
-        await sleep(DELAY_MS);
-        continue;
-      }
-      insertTrackId.run(track.track_id, s.id);
-      const lines = splitLines(ingested.plainLyrics);
+      const lines = splitLines(fetched.plainLyrics);
       for (let li = 0; li < lines.length; li++) {
         const id = `versesignal:ll:${s.id}:${li}`;
         insertLine.run(id, s.id, li, lines[li]!.text, lines[li]!.section);
@@ -160,8 +199,8 @@ async function main() {
           );
         }
       }
+      process.stdout.write(`  · ${fetched.source} · ${lines.length} lines\n`);
       ok++;
-      process.stdout.write(`  · ${lines.length} lines\n`);
     } catch (err) {
       fail++;
       console.warn(`  ✗ ingest failed: ${(err as Error).message}`);

@@ -8,7 +8,10 @@
 
 ## What this is
 
-A navigable graph of charting pop music from **2018 to today**, where
+A navigable graph of charting pop music from **1960s to 2023**, staged by chart era.
+The currently shipped demo slice is **2018–2023** (top 25 per year), while the
+product target is a long-range cultural atlas across six decades.
+
 every node is a song / artist / year / event / theme / mood / entity, and
 every edge carries **weight + confidence + source API + model version +
 explanation + evidence rows**. Click any edge in the graph explorer to
@@ -20,8 +23,8 @@ themes and moods in ElevenLabs' Rachel voice.
 ## Quick start (60 seconds)
 
 ```bash
-git clone https://github.com/pranaysuyash/musicathon26
-cd musicathon26
+git clone https://github.com/pranaysuyash/musicathon
+cd musicathon
 npm install
 
 # 1. Initialize the database (schema + 10 curated events)
@@ -48,6 +51,25 @@ npm run dev
 npx tsx tools/test-artist-match.ts
 ```
 
+## Demo script (judge-ready, 5 steps)
+
+1. Boot the app: `npm run dev`
+2. Open `/` and confirm the product thesis is visible in the hero in 5 seconds.
+3. Open `/graph` and click the 2020 preset to inspect non-empty neighborhoods.
+4. Open `/song/versesignal:2020:01:blinding-lights-the-weeknd` and verify event links show confidence/provenance.
+5. Open `/event/versesignal:ev:covid_19` and click one song’s evidence drawer on the graph page for lyric-grounded justification.
+
+When recording:
+- Start on `/`.
+- Run preset path in the PathPanel: `Blinding Lights → COVID-19`.
+- Mention explicit confidence/provenance signals when moving between song/event nodes.
+
+## Environment/configuration truth
+
+- `.env.example` uses `HF_TOKEN` for Hugging Face.
+- `scripts/check-env.ts` also accepts `HUGGINGFACE_API_KEY` as an alias.
+- Cyanite checks accept either `CYANITE_WEBHOOK_SECRET` (webhook) or `CYANITE_API_KEY`.
+
 ## The three product flows
 
 1. **"What was the world singing in 2020?"** — `/year/2020`
@@ -64,10 +86,10 @@ npx tsx tools/test-artist-match.ts
 
 ## Chart-data framing
 
-- **2018–2019**: U.S. chart-memory mode (Billboard Hot 100 year-end proxies)
-- **2020+**: Global streaming mode (Billboard Global 200 / Songstats)
-- The 150-song spine is **2018–2023, top 25 per year** from
-  Wikipedia year-end lists (curated in `data/chart-seed.ts`)
+- **Target scope:** 1960s–2019 US historical chart spine (Billboard Hot 100 year-end + curated transfer rules),
+  then **2020–2023 streaming-first context** (Billboard Global 200 / Songstats).
+- **Current demo slice:** **2018–2023**, top 25 per year, from
+  Wikipedia year-end lists (curated in `data/chart-seed.ts`).
 
 ## Partner API ownership
 

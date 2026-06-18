@@ -5,6 +5,7 @@ import { Play, Pause, Loader2 } from "lucide-react";
 
 interface InsightResponse {
   year: number;
+  region: string;
   text: string;
   audioUrl: string | null;
   themes: { theme: string; avgScore: number }[];
@@ -12,7 +13,13 @@ interface InsightResponse {
   topEvent: { event_id: string; name: string; song_count: number } | null;
 }
 
-export function YearInsightPlayer({ year }: { year: number }) {
+export function YearInsightPlayer({
+  year,
+  region = "US",
+}: {
+  year: number;
+  region?: string;
+}) {
   const [insight, setInsight] = useState<InsightResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -23,7 +30,9 @@ export function YearInsightPlayer({ year }: { year: number }) {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetch(`/api/insight?year=${year}`)
+    setAudio(null);
+    const encodedRegion = encodeURIComponent(region);
+    fetch(`/api/insight?year=${year}&region=${encodedRegion}`)
       .then((r) => r.json())
       .then((j: InsightResponse) => {
         if (!cancelled) setInsight(j);
@@ -37,7 +46,7 @@ export function YearInsightPlayer({ year }: { year: number }) {
     return () => {
       cancelled = true;
     };
-  }, [year]);
+  }, [year, region]);
 
   useEffect(() => {
     if (!insight?.audioUrl) return;

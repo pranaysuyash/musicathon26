@@ -5,7 +5,7 @@ import { GraphExplorer } from "@/components/graph/graph-explorer";
 export const metadata: Metadata = {
   title: "Knowledge graph",
   description:
-    "Explore the VerseSignal knowledge graph: songs, themes, entities, artists, and events connected across 6 years (2018–2023).",
+    "Explore the VerseSignal knowledge graph across the long-term corpus target (1960s–2023), with the shipped demo slice covering 2018–2023.",
 };
 
 export default function GraphPage() {

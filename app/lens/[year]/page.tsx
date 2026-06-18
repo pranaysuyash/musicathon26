@@ -26,6 +26,7 @@ import { RegionPicker } from "@/components/lens/region-picker";
 import { DataHealthCard } from "@/components/lens/data-health";
 import { AnalogousYearsSection } from "@/components/lens/analogous-years";
 import { SignalYearDistribution } from "@/components/lens/signal-year-distribution";
+import { YearInsightPlayer } from "@/components/lens/year-insight-player";
 
 export async function generateMetadata({
   params,
@@ -37,6 +38,9 @@ export async function generateMetadata({
   return {
     title: `${year} — Cultural lens`,
     description: `What the charts were saying in ${year}: top themes, moods, entities, and the events that surrounded them. Evidence-backed.`,
+    openGraph: {
+      images: [{ url: `/api/og?type=lens&title=${encodeURIComponent(`${year} Cultural Lens`)}&subtitle=${encodeURIComponent(`What the charts were saying in ${year}`)}`, width: 1200, height: 630 }],
+    },
   };
 }
 
@@ -104,6 +108,16 @@ export default async function LensPage({
           <TimelineScrubber years={allYears} currentYear={year} />
         </div>
       </header>
+
+      <section className="mb-10">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-ink-500">
+          Voice of the year
+        </h2>
+        <p className="mt-1 mb-4 text-sm text-ink-400">
+          Region-aware narrated cultural brief for {REGION_LABELS[region] ?? region}.
+        </p>
+        <YearInsightPlayer year={year} region={region} />
+      </section>
 
       <AnalogousYearsSection analogues={analogous} year={year} />
 
@@ -230,7 +244,7 @@ export default async function LensPage({
           </h2>
           <p className="mt-1 mb-4 text-sm text-ink-400">
             Songs from {year} still carry the signal of {echoes.length} past event{echoes.length === 1 ? "" : "s"}.
-            The cultural resonance doesn't stop when the news cycle moves on.
+            The cultural resonance doesn&apos;t stop when the news cycle moves on.
           </p>
           <div className="card divide-y divide-ink-800/60">
             {echoes.map((e) => (

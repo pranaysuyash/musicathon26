@@ -13,6 +13,14 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 
+function pickEnvValue(keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = process.env[key];
+    if (value) return value;
+  }
+  return undefined;
+}
+
 interface HealthStats {
   songs: number;
   events: number;
@@ -76,8 +84,8 @@ const PARTNER_KEYS: PartnerKeyStatus[] = [
   },
   {
     name: "Hugging Face (embeddings + GLiNER)",
-    configured: Boolean(process.env.HUGGINGFACE_API_KEY),
-    env_var: "HUGGINGFACE_API_KEY",
+    configured: Boolean(pickEnvValue(["HUGGINGFACE_API_KEY", "HF_TOKEN"])),
+    env_var: "HF_TOKEN (or HUGGINGFACE_API_KEY)",
   },
   {
     name: "JamBase (artist/tour/venue MCP)",
@@ -86,8 +94,8 @@ const PARTNER_KEYS: PartnerKeyStatus[] = [
   },
   {
     name: "Cyanite (audio mood webhook)",
-    configured: Boolean(process.env.CYANITE_WEBHOOK_SECRET),
-    env_var: "CYANITE_WEBHOOK_SECRET",
+    configured: Boolean(pickEnvValue(["CYANITE_WEBHOOK_SECRET", "CYANITE_API_KEY"])),
+    env_var: "CYANITE_WEBHOOK_SECRET (or CYANITE_API_KEY)",
   },
 ];
 

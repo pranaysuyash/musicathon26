@@ -9,12 +9,22 @@ import type { Theme } from "@/lib/types";
 
 const VALID_THEMES = new Set(Object.keys(THEME_LABELS));
 
+function primaryArtist(value: string): string {
+  return value
+    .split(/\s+(?:featuring|feat\.?|ft\.?|with)\s+/i)[0]
+    .split(/,\s*&\s*|\s+&\s+/)[0]
+    .trim();
+}
+
 export async function generateMetadata({ params }: { params: { theme: string } }): Promise<Metadata> {
   const theme = params.theme as Theme;
   if (!VALID_THEMES.has(theme)) return { title: "Theme not found" };
   return {
     title: `${THEME_LABELS[theme]} — VerseSignal`,
     description: THEME_DESCRIPTIONS[theme],
+    openGraph: {
+      images: [{ url: `/api/og?type=theme&title=${encodeURIComponent(THEME_LABELS[theme])}&subtitle=${encodeURIComponent(THEME_DESCRIPTIONS[theme])}`, width: 1200, height: 630 }],
+    },
   };
 }
 
@@ -133,8 +143,12 @@ export default function ThemePage({ params }: { params: { theme: string } }) {
                   className="min-w-0 flex-1 truncate text-ink-100 hover:text-signal-300"
                 >
                   {s.title}
-                  <span className="text-ink-500"> — {s.artist}</span>
                 </Link>
+                <span className="text-ink-500">
+                  <Link href={`/artist/${encodeURIComponent(primaryArtist(s.artist))}`} className="hover:text-signal-300">
+                    — {primaryArtist(s.artist)}
+                  </Link>
+                </span>
                 <span className="hidden shrink-0 text-xs text-ink-500 md:inline">{s.year}</span>
                 <span className="w-10 shrink-0 text-right text-xs tabular-nums text-ink-400 md:w-16">
                   {(s.score * 100).toFixed(0)}

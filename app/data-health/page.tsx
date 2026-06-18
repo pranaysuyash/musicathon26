@@ -3,11 +3,14 @@
 // Per decision 0019 P3.1 + external review, this page
 // answers: "Is the corpus ready for judging?"
 //
-// Server-rendered. Fetches /api/data-health at request
-// time and renders a structured dashboard.
+// Server-rendered dashboard that reads the shared data health
+// report helper directly (no internal API fetch in prerender paths).
 
 import type { Metadata } from "next";
 import Link from "next/link";
+import { getDataHealth, type DataHealth } from "@/lib/reports/data-health";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Data health",
@@ -15,68 +18,9 @@ export const metadata: Metadata = {
     "Operator-facing dashboard: corpus summary, source breakdown, coverage, integrity issues, and intent-vs-actual for the VerseSignal corpus.",
 };
 
-interface SourceBreakdown {
-  source: string;
-  count: number;
-  pct_of_total: number;
-}
-interface CoverageRow {
-  area: string;
-  total: number;
-  with: number;
-  pct: number;
-  description: string;
-}
-interface YearBreakdown {
-  year: number;
-  songs: number;
-  songs_with_lyrics: number;
-  events_overlapping: number;
-  top_signal: string;
-}
-interface IntegrityIssue {
-  check: string;
-  severity: "info" | "warn" | "error";
-  count: number;
-  description: string;
-}
-interface IntentActual {
-  description: string;
-  current: number;
-  target: number;
-}
-interface DataHealth {
-  ok: boolean;
-  timestamp: string;
-  corpus_summary: {
-    songs: number;
-    songs_with_lyrics: number;
-    events: number;
-    entities: number;
-    artists_with_jambase: number;
-    artists_with_musicbrainz: number;
-    artists_with_wikidata: number;
-  };
-  source_breakdown: {
-    graph_edges: SourceBreakdown[];
-    theme_scores: SourceBreakdown[];
-    mood_scores: SourceBreakdown[];
-    entity_mentions: SourceBreakdown[];
-    evidence: SourceBreakdown[];
-  };
-  coverage: CoverageRow[];
-  year_breakdown: YearBreakdown[];
-  integrity_issues: IntegrityIssue[];
-  intent_vs_actual: IntentActual[];
-}
-
 async function fetchHealth(): Promise<DataHealth | null> {
   try {
-    const res = await fetch("/api/data-health", {
-      cache: "no-store",
-    });
-    if (!res.ok) return null;
-    return (await res.json()) as DataHealth;
+    return await getDataHealth();
   } catch {
     return null;
   }

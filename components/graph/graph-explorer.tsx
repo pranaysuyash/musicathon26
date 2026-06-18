@@ -61,7 +61,7 @@ export function GraphExplorer() {
       setError(null);
       try {
         const res = await fetch(
-          `/api/graph?nodeId=${encodeURIComponent(rootId)}&hops=${hops}`
+          `/api/graph?nodeId=${encodeURIComponent(rootId)}&rootType=${encodeURIComponent(rootType)}&hops=${hops}`
         );
         if (!res.ok) throw new Error(`Graph query failed: ${res.status}`);
         const json = (await res.json()) as GraphResponse;
@@ -76,7 +76,7 @@ export function GraphExplorer() {
     return () => {
       cancelled = true;
     };
-  }, [rootId, hops]);
+  }, [rootId, hops, rootType]);
 
   useEffect(() => {
     if (!selectedEdge) {
@@ -139,6 +139,13 @@ export function GraphExplorer() {
           className="pill pill-echo"
         >
           BLM 2020
+        </button>
+        <button
+          onClick={() => router.push("/ask")}
+          className="pill pill-signal"
+          type="button"
+        >
+          Ask the graph
         </button>
         <span className="ml-3 text-xs uppercase tracking-wider text-ink-500">Hops:</span>
         {[1, 2, 3].map((h) => (

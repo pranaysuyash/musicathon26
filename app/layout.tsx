@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
 
+import { TelemetryReporter } from "@/components/telemetry/telemetry-reporter";
+
 export const metadata: Metadata = {
   metadataBase: new URL(
     process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000"
@@ -28,11 +30,13 @@ export const metadata: Metadata = {
     siteName: "VerseSignal",
     title: "VerseSignal",
     description: "When the world was going through something, what was it singing?",
+    images: [{ url: "/api/og?type=default", width: 1200, height: 630 }],
   },
   twitter: {
     card: "summary_large_image",
     title: "VerseSignal",
     description: "When the world was going through something, what was it singing?",
+    images: [{ url: "/api/og?type=default", width: 1200, height: 630 }],
   },
   robots: {
     index: true,
@@ -56,7 +60,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         >
           Skip to main content
         </a>
-        <div id="main">{children}</div>
+        <div id="main">
+          {children}
+          <TelemetryReporter />
+        </div>
       </body>
     </html>
   );

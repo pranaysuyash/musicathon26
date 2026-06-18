@@ -7,10 +7,18 @@ const Year = z.coerce.number().int().min(1950).max(2100);
 export const YearQuery = z.object({ year: Year, region: z.string().default("US") });
 export const EventQuery = z.object({ id: EventId });
 export const SongQuery = z.object({ id: SongId });
-export const GraphQuery = z.object({ nodeId: z.string(), hops: z.coerce.number().int().min(1).max(4).default(2) });
+export const GraphQuery = z.object({
+  nodeId: z.string().min(1).default("versesignal:year:2020"),
+  hops: z.coerce.number().int().min(1).max(4).default(2),
+});
 export const GraphPathQuery = z.object({
   from: z.string().min(1),
   to: z.string().min(1),
+  edgeTypes: z.array(z.string()).optional(),
+  maxHops: z.coerce.number().int().min(1).max(8).default(6),
+});
+export const GraphAskQuery = z.object({
+  q: z.string().trim().min(6).max(420),
   edgeTypes: z.array(z.string()).optional(),
   maxHops: z.coerce.number().int().min(1).max(8).default(6),
 });

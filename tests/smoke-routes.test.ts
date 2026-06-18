@@ -30,6 +30,9 @@ const ROUTES: RouteSpec[] = [
   { path: "/lens/2023", expectStatus: 200 },
   { path: "/sitemap.xml", expectStatus: 200 },
   { path: "/robots.txt", expectStatus: 200 },
+  { path: "/api/graph?nodeId=versesignal:year:2020&hops=2", expectStatus: 200, expectInBody: ["nodes", "edges"] },
+  { path: "/api/graph?rootType=event&rootId=versesignal:ev:covid_19&hops=2", expectStatus: 200, expectInBody: ["nodes"] },
+  { path: "/api/song?id=versesignal:2020:01:blinding-lights-the-weeknd", expectStatus: 200, expectInBody: ["eventLinks", "themes"] },
   { path: "/api/health", expectStatus: 200, expectInBody: ["versesignal", "stats", "partner_keys"] },
   { path: "/api/year-signals?year=2020&region=US", expectStatus: 200, expectInBody: ["signals", "2020"] },
 ];

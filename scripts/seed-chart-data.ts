@@ -49,27 +49,42 @@ function main() {
   const seedYear = db.transaction((year: number, entries: typeof CHART_SEED[number]) => {
     for (const e of entries) {
       const id = songId(year, e.rank, e.title, e.artist);
-      const primaryArtist = e.artist.split(/\s+(?:feat\.?|featuring|ft\.?|&|and|with)\s+/i)[0]!.trim();
-      insertSong.run(id, e.title, primaryArtist, year, "billboard_hot100_ye", e.rank, "US");
+      // Split multi-artist names properly so all collaborators are preserved.
+      // Handles: "X, Y and Z" → ["X", "Y", "Z"], "X featuring Y" → ["X", "Y"]
+      const parts = e.artist.split(/\s+(?:feat\.?|featuring|ft\.?|&|and|with)\s+/i).flatMap((p) => p.split(/,\s*/).map((s) => s.trim()).filter(Boolean));
+      // Deduplicate case-insensitively, preserving first-encountered casing
+      const seenArtists = new Set<string>();
+      const allArtists: string[] = [];
+      for (const a of parts) {
+        const key = a.toLowerCase();
+        if (!seenArtists.has(key)) { seenArtists.add(key); allArtists.push(a); }
+      }
+      const primaryArtist = allArtists[0]!;
+      const artistStr = allArtists.join(", ");
+      insertSong.run(id, e.title, artistStr, year, "billboard_hot100_ye", e.rank, "US");
 
       const songNode = `versesignal:n:song:${id}`;
-      const artistNode = artistNodeId(primaryArtist);
       const yearNode = yearNodeId(year);
       insertGraphNode.run(songNode, "song", `${e.title} — ${primaryArtist} (${year})`, null);
-      insertGraphNode.run(artistNode, "artist", primaryArtist, null);
       insertGraphNode.run(yearNode, "year", String(year), null);
 
-      insertEdge.run(
-        `versesignal:e:${id}:performed_by`,
-        songNode,
-        artistNode,
-        "performed_by",
-        1.0,
-        1.0,
-        "manual",
-        null,
-        "Artist credit from chart entry."
-      );
+      const allArtistNames = [...new Set([primaryArtist, ...allArtists])];
+      const artistCount = allArtistNames.length;
+      for (const artistName of allArtistNames) {
+        const aNode = artistNodeId(artistName);
+        insertGraphNode.run(aNode, "artist", artistName, null);
+        insertEdge.run(
+          `versesignal:e:${id}:${artistNodeId(artistName).replace("versesignal:artist:", "")}`,
+          songNode,
+          aNode,
+          "performed_by",
+          1.0 / artistCount,
+          1.0,
+          "manual",
+          null,
+          "Artist credit from chart entry."
+        );
+      }
       insertEdge.run(
         `versesignal:e:${id}:charted_in`,
         songNode,

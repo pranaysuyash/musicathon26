@@ -1,20 +1,31 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { getEventById, getSongsForEvent, getAllEvents, getEventSignalDecay, REGION_LABELS } from "@/lib/db/queries";
+import { getEventById, getSongsForEvent, getAllEvents, getEventSignalDecay, getEventLeadAnalysis, REGION_LABELS } from "@/lib/db/queries";
 
 export async function generateMetadata({
   params,
 }: {
   params: { id: string };
 }): Promise<Metadata> {
-  const event = getEventById(decodeURIComponent(params.id));
+  const event = getEventById(decodeRouteParam(params.id));
   if (!event) return { title: "Event not found" };
   return {
     title: event.name,
     description: `Songs linked to ${event.name} (${event.startDate}–${event.endDate ?? "ongoing"}). ${event.category}.`,
+    openGraph: {
+      images: [{ url: `/api/og?type=event&title=${encodeURIComponent(event.name)}&subtitle=${encodeURIComponent(`Songs linked to ${event.name} (${event.category})`)}`, width: 1200, height: 630 }],
+    },
   };
 }
+function decodeRouteParam(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 import { initDb } from "@/lib/db";
 import { ConfidenceBar, Pill, SectionTitle } from "@/components/ui/primitives";
 import { StoryNextStep } from "@/components/story/story-next-step";
@@ -29,7 +40,7 @@ interface PageProps {
 
 export default function EventPage({ params }: PageProps) {
   initDb();
-  const id = decodeURIComponent(params.id);
+  const id = decodeRouteParam(params.id);
   const event = getEventById(id);
   if (!event) {
     const all = getAllEvents();
@@ -51,6 +62,7 @@ export default function EventPage({ params }: PageProps) {
 
   const linked = getSongsForEvent(event.id, 0.1);
   const decay = getEventSignalDecay(event.id);
+  const lead = getEventLeadAnalysis(event.id);
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
@@ -147,6 +159,72 @@ export default function EventPage({ params }: PageProps) {
           )}
         </ul>
       </section>
+
+      {/* Event lead analysis (P2.3) — signals that were already shifting before the event */}
+      {lead && lead.leadSignals.length > 0 ? (
+        <section className="mb-10">
+          <SectionTitle subtitle={`Signal changes visible in the chart year before this event (${lead.preEventYear}).`}>
+            Lead signals
+            {lead.totalCorrelatedSignals > 1 ? (
+              <span className="ml-2 text-xs font-normal text-ink-400">
+                · {(lead.leadSignalRate * 100).toFixed(0)}% lead rate
+                ({lead.preElevatedSignals}/{lead.totalCorrelatedSignals} directionally consistent)
+              </span>
+            ) : null}
+          </SectionTitle>
+          <div className="card divide-y divide-ink-800/60">
+            {lead.leadSignals.map((s, i) => (
+              <div key={`${s.signalType}:${s.signal}`} className="flex items-center gap-3 p-3 text-sm">
+                <span className="w-6 text-xs text-ink-500">{i + 1}.</span>
+                <span title={s.directionallyConsistent ? "Directionally consistent (true lead)" : "Pre-event drift (opposite direction during event)"}>
+                  {s.directionallyConsistent ? (
+                    <Pill variant="echo">lead</Pill>
+                  ) : s.correlatedDuringEvent ? (
+                    <Pill variant="warn">drift</Pill>
+                  ) : (
+                    <Pill variant="mute">ambient</Pill>
+                  )}
+                </span>
+                <Pill variant="mute">{s.signalType}</Pill>
+                <span className="flex-1 truncate font-medium text-ink-100">
+                  {s.signal}
+                </span>
+                <div className="flex items-center gap-2 text-xs">
+                  {s.correlatedDuringEvent ? (
+                    <span className="text-signal-400" title="Correlated during event">
+                      Δ{s.eventCorrelationDelta !== null ? (s.eventCorrelationDelta > 0 ? "+" : "") + s.eventCorrelationDelta.toFixed(1) : "?"}
+                    </span>
+                  ) : null}
+                  <span className={s.delta > 0 ? "text-green-400" : "text-ink-500"}
+                    title="Pre-event delta vs baseline">
+                    pre{s.delta > 0 ? "+" : ""}{s.delta.toFixed(1)}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+          {lead.leadSignalRate > 0.3 ? (
+            <p className="mt-3 text-xs text-ink-500">
+              <span className="text-signal-400 font-medium">High lead rate.</span>{" "}
+              Over {lead.leadSignalRate > 0.5 ? "half" : "a third"} of signals correlated
+              with this event were already shifting in the same direction in {lead.preEventYear}
+              — the music was anticipating this moment.
+            </p>
+          ) : lead.preElevatedSignals > 0 ? (
+            <p className="mt-3 text-xs text-ink-500">
+              <span className="text-ink-300 font-medium">Partial anticipation.</span>{" "}
+              Some signals in this event&apos;s correlation set were elevated in {lead.preEventYear}
+              , but moved in the opposite direction during the event (labelled &quot;drift&quot;).
+            </p>
+          ) : (
+            <p className="mt-3 text-xs text-ink-500">
+              <span className="text-ink-300 font-medium">No lead.</span>{" "}
+              None of the signals correlated with this event were elevated in {lead.preEventYear}.
+              The musical shift was synchronous with the event itself.
+            </p>
+          )}
+        </section>
+      ) : null}
 
       {/* Event signal decay (P2.3) — how long the event's signal persisted */}
       {decay.length > 1 ? (

@@ -8,6 +8,7 @@
 import { getDb } from "./index";
 import { all, get } from "./sql";
 import type { Song, WorldEvent, GraphNode, GraphEdge, Evidence } from "../types";
+import { slug as slugify } from "../graph/ids";
 
 /** Human-readable labels for region codes. */
 export const REGION_LABELS: Record<string, string> = {
@@ -53,6 +54,28 @@ interface SongRow {
   metadata_json: string | null;
 }
 
+export interface ChartEra {
+  id: string;
+  label: string;
+  dateRange: string;
+  sourceMode: string;
+  caveat: string;
+  comparability: "high" | "medium" | "low";
+}
+
+interface EntityMetaRow {
+  id: string;
+  canonical_name: string;
+  entity_type: string;
+  wikidata_id: string | null;
+  musicbrainz_id: string | null;
+  musicbrainz_artist_type: string | null;
+  jambase_id: string | null;
+  jambase_genres_json: string | null;
+  aliases_json: string | null;
+  metadata_json: string | null;
+}
+
 interface EventRow {
   id: string;
   name: string;
@@ -87,6 +110,15 @@ interface GraphEdgeRow {
   created_at: string;
 }
 
+function parseJsonField<T>(raw: string | null, fallback: T): T {
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
 interface EvidenceRow {
   id: string;
   edge_id: string;
@@ -113,6 +145,84 @@ function rowToSong(r: SongRow): Song {
     releaseDate: r.release_date ?? undefined,
     ingestedAt: r.ingested_at,
     metadata: r.metadata_json ? JSON.parse(r.metadata_json) : undefined,
+  };
+}
+
+const CHART_ERAS: Array<{
+  start: number;
+  end: number;
+  id: ChartEra["id"];
+  label: ChartEra["label"];
+  sourceMode: ChartEra["sourceMode"];
+  caveat: string;
+  comparability: ChartEra["comparability"];
+}> = [
+  {
+    start: 1960,
+    end: 1979,
+    id: "broadcast_counterculture",
+    label: "Broadcast / counterculture era",
+    sourceMode: "Billboard Hot 100 year-end (historical)",
+    caveat: "US broadcast-era charting; less global comparability.",
+    comparability: "medium",
+  },
+  {
+    start: 1980,
+    end: 1999,
+    id: "mtv_radio_era",
+    label: "MTV / radio / superstar era",
+    sourceMode: "Billboard Hot 100 + metadata context",
+    caveat: "US commercial pop visibility with TV/image dynamics.",
+    comparability: "medium",
+  },
+  {
+    start: 2000,
+    end: 2011,
+    id: "digital_transition_era",
+    label: "Digital transition era",
+    sourceMode: "Billboard Hot 100 + digital influence",
+    caveat: "Downloading/early-platform mechanics changed chart semantics.",
+    comparability: "medium",
+  },
+  {
+    start: 2012,
+    end: 2019,
+    id: "streaming_transition_era",
+    label: "Streaming transition era",
+    sourceMode: "Billboard Hot 100 + streaming effects",
+    caveat: "Algorithmic amplification is increasing but still mixed with traditional ranking.",
+    comparability: "high",
+  },
+  {
+    start: 2020,
+    end: 2023,
+    id: "global_streaming_era",
+    label: "Global streaming era",
+    sourceMode: "Billboard Global 200 + Songstats-contextual",
+    caveat: "Global chart comparability is strongest here.",
+    comparability: "high",
+  },
+];
+
+export function getChartEraForYear(year: number): ChartEra {
+  const era = CHART_ERAS.find((item) => year >= item.start && year <= item.end);
+  if (era) {
+    return {
+      id: era.id,
+      label: era.label,
+      dateRange: `${era.start}s–${era.end}`,
+      sourceMode: era.sourceMode,
+      caveat: era.caveat,
+      comparability: era.comparability,
+    };
+  }
+  return {
+    id: "custom_era",
+    label: "Custom era",
+    dateRange: `${year}`,
+    sourceMode: "Manual/experimental ingestion",
+    caveat: "No standardized chart-era contract is assigned yet.",
+    comparability: "low",
   };
 }
 
@@ -201,6 +311,56 @@ export function getEventById(id: string): WorldEvent | null {
 export function getGraphNode(id: string): GraphNode | null {
   const r = get<GraphNodeRow>(`SELECT * FROM graph_nodes WHERE id = ?`, id);
   return r ? rowToNode(r) : null;
+}
+
+export function searchGraphNodes(
+  q: string,
+  opts: { limit?: number; nodeType?: GraphNode["nodeType"] } = {}
+): GraphNode[] {
+  const normalized = q.trim().toLowerCase();
+  if (!normalized) return [];
+  const limit = Math.max(1, Math.min(opts.limit ?? 8, 30));
+  const like = `%${normalized}%`;
+  const nodeType = opts.nodeType;
+  const rows = nodeType
+    ? all<GraphNodeRow>(
+        `
+        SELECT id, node_type, label, properties_json FROM graph_nodes
+        WHERE (LOWER(label) LIKE ? OR LOWER(id) LIKE ?) AND node_type = ?
+        ORDER BY
+          CASE
+            WHEN LOWER(label) = ? THEN 0
+            WHEN LOWER(label) LIKE ? THEN 1
+            ELSE 2
+          END,
+          LENGTH(label) ASC
+        LIMIT ?`,
+        like,
+        like,
+        nodeType,
+        normalized,
+        `${normalized}%`,
+        limit
+      )
+    : all<GraphNodeRow>(
+        `
+        SELECT id, node_type, label, properties_json FROM graph_nodes
+        WHERE LOWER(label) LIKE ? OR LOWER(id) LIKE ?
+        ORDER BY
+          CASE
+            WHEN LOWER(label) = ? THEN 0
+            WHEN LOWER(label) LIKE ? THEN 1
+            ELSE 2
+          END,
+          LENGTH(label) ASC
+        LIMIT ?`,
+        like,
+        like,
+        normalized,
+        `${normalized}%`,
+        limit
+      );
+  return rows.map(rowToNode);
 }
 
 export function getNodeNeighborhood(nodeId: string, hops: number = 2, limit: number = 250): {
@@ -451,7 +611,7 @@ export interface SimilarSong {
 
 export interface ArtistMeta {
   canonical_name: string;
-  jambase_id: string;
+  jambase_id: string | null;
   jambase_genres: string[];
   musicbrainz_id: string | null;
   wikidata_id: string | null;
@@ -462,7 +622,7 @@ export function getArtistMeta(artistName: string): ArtistMeta | null {
   // Try exact match first, then lowercased.
   const exact = get<{
     canonical_name: string;
-    jambase_id: string;
+    jambase_id: string | null;
     jambase_genres_json: string;
     musicbrainz_id: string;
     wikidata_id: string;
@@ -474,13 +634,112 @@ export function getArtistMeta(artistName: string): ArtistMeta | null {
       LIMIT 1`,
     artistName
   );
-  if (!exact || !exact.jambase_id) return null;
+  if (!exact) return null;
   return {
     canonical_name: exact.canonical_name,
     jambase_id: exact.jambase_id,
-    jambase_genres: exact.jambase_genres_json ? JSON.parse(exact.jambase_genres_json) : [],
+    jambase_genres: parseJsonField<string[]>(exact.jambase_genres_json, []),
     musicbrainz_id: exact.musicbrainz_id || null,
     wikidata_id: exact.wikidata_id || null,
+  };
+}
+
+function normalizeEntityRef(input: string): string {
+  try {
+    return decodeURIComponent(input);
+  } catch {
+    return input;
+  }
+}
+
+export interface EntityProfile {
+  id: string;
+  canonicalName: string;
+  entityType: string;
+  wikidataId: string | null;
+  musicbrainzId: string | null;
+  musicbrainzArtistType: string | null;
+  jambaseId: string | null;
+  jambaseGenres: string[];
+  aliases: string[];
+  metadata: Record<string, unknown>;
+}
+
+function getEntityByRef(entityRef: string, entityType?: string): EntityMetaRow | null {
+  const direct = get<EntityMetaRow>(
+    `SELECT * FROM entities
+      WHERE id = ?
+      ${entityType ? "AND entity_type = ?" : ""}
+      LIMIT 1`,
+    ...(entityType ? [entityRef, entityType] : [entityRef])
+  );
+  if (direct) return direct;
+
+  const canonical = get<EntityMetaRow>(
+    `SELECT * FROM entities
+      WHERE LOWER(canonical_name) = LOWER(?)
+        ${entityType ? "AND entity_type = ?" : ""}
+      LIMIT 1`,
+    ...(entityType ? [entityRef, entityType] : [entityRef])
+  );
+  if (canonical) return canonical;
+
+  const aliasMatch = get<EntityMetaRow>(
+    `SELECT * FROM entities
+      WHERE EXISTS (
+        SELECT 1 FROM json_each(aliases_json)
+        WHERE LOWER(json_each.value) = LOWER(?)
+      )
+      ${entityType ? "AND entity_type = ?" : ""}
+      LIMIT 1`,
+    ...(entityType ? [entityRef, entityType] : [entityRef])
+  );
+  if (aliasMatch) return aliasMatch;
+
+  const candidates = all<EntityMetaRow>(
+    `SELECT * FROM entities ${entityType ? "WHERE entity_type = ?" : ""}`,
+    ...(entityType ? [entityType] : [])
+  );
+  const target = slugify(entityRef);
+  const fallback = candidates.find((row) => {
+    if (slugify(row.canonical_name) === target) return true;
+    const aliases = parseJsonField<string[]>(row.aliases_json, []);
+    return aliases.some((alias) => slugify(alias) === target);
+  });
+  return fallback ?? null;
+}
+
+function mapEntityRow(row: EntityMetaRow): EntityProfile {
+  return {
+    id: row.id,
+    canonicalName: row.canonical_name,
+    entityType: row.entity_type,
+    wikidataId: row.wikidata_id,
+    musicbrainzId: row.musicbrainz_id,
+    musicbrainzArtistType: row.musicbrainz_artist_type,
+    jambaseId: row.jambase_id,
+    jambaseGenres: parseJsonField<string[]>(row.jambase_genres_json, []),
+    aliases: parseJsonField<string[]>(row.aliases_json, []),
+    metadata: parseJsonField<Record<string, unknown>>(row.metadata_json, {}),
+  };
+}
+
+export function getEntityProfile(entityRef: string): EntityProfile | null {
+  const row = getEntityByRef(normalizeEntityRef(entityRef));
+  if (!row) return null;
+  return mapEntityRow(row);
+}
+
+export interface ArtistProfile extends EntityProfile {
+  role: string;
+}
+
+export function getArtistProfile(artistRef: string): ArtistProfile | null {
+  const row = getEntityByRef(normalizeEntityRef(artistRef), "artist");
+  if (!row) return null;
+  return {
+    ...mapEntityRow(row),
+    role: "artist",
   };
 }
 
@@ -533,7 +792,21 @@ export function getSimilarSongs(songId: string, limit: number = 8): SimilarSong[
   return [...direct, ...back.filter((b: SimilarSong) => !seen.has(b.song_id))].slice(0, limit);
 }
 
-export function getSongsMentioningEntity(entityId: string, limit: number = 50): {
+export interface EntityThemeSignal {
+  theme: string;
+  songCount: number;
+  avgScore: number;
+}
+
+export interface EntityEventLink {
+  id: string;
+  name: string;
+  startDate: string;
+  category: string;
+  songCount: number;
+}
+
+export interface SongMention {
   songId: string;
   title: string;
   artist: string;
@@ -541,7 +814,9 @@ export function getSongsMentioningEntity(entityId: string, limit: number = 50): 
   surfaceForm: string;
   confidence: number;
   source: string;
-}[] {
+}
+
+export function getSongsMentioningEntity(entityId: string, limit: number = 50): SongMention[] {
   interface Row {
     song_id: string;
     title: string;
@@ -570,6 +845,182 @@ export function getSongsMentioningEntity(entityId: string, limit: number = 50): 
     surfaceForm: r.surface_form ?? "",
     confidence: r.confidence,
     source: r.source,
+  }));
+}
+
+export function getEntityThemeSignals(entityId: string, limit: number = 12): EntityThemeSignal[] {
+  interface Row {
+    theme: string;
+    song_count: number;
+    avg_score: number;
+  }
+  return all<Row>(
+    `
+    SELECT ts.theme, COUNT(*) AS song_count, AVG(ts.score) AS avg_score
+      FROM theme_scores ts
+      JOIN entity_mentions em ON em.song_id = ts.song_id
+     WHERE em.entity_id = ?
+     GROUP BY ts.theme
+     ORDER BY avg_score DESC, song_count DESC
+     LIMIT ?
+    `,
+    entityId,
+    limit
+  ).map((r) => ({
+    theme: r.theme,
+    songCount: r.song_count,
+    avgScore: r.avg_score,
+  }));
+}
+
+export function getEntityEventLinks(entityId: string, limit: number = 20): EntityEventLink[] {
+  interface Row {
+    id: string;
+    name: string;
+    start_date: string;
+    category: string;
+    song_count: number;
+  }
+  return all<Row>(
+    `
+    SELECT ev.id, ev.name, ev.start_date, ev.category, COUNT(DISTINCT em.song_id) AS song_count
+      FROM entity_mentions em
+      JOIN songs s ON em.song_id = s.id
+      JOIN graph_edges ge
+        ON ge.src_id = 'versesignal:n:song:' || s.id
+       AND ge.edge_type = 'associated_with_event'
+      JOIN events ev ON ev.id = SUBSTR(ge.dst_id, 21)
+     WHERE em.entity_id = ?
+     GROUP BY ev.id, ev.name, ev.start_date, ev.category
+     ORDER BY song_count DESC
+     LIMIT ?
+    `,
+    entityId,
+    limit
+  ).map((r) => ({
+    id: r.id,
+    name: r.name,
+    startDate: r.start_date,
+    category: r.category,
+    songCount: r.song_count,
+  }));
+}
+
+export interface ArtistSong {
+  songId: string;
+  title: string;
+  artist: string;
+  year: number;
+  chartRank: number;
+}
+
+export interface ArtistThemeSignal {
+  theme: string;
+  songCount: number;
+  avgScore: number;
+}
+
+export interface ArtistEventLink {
+  id: string;
+  name: string;
+  startDate: string;
+  category: string;
+  songCount: number;
+}
+
+export function getArtistSongs(artistName: string, limit: number = 60): ArtistSong[] {
+  interface Row {
+    id: string;
+    title: string;
+    artist: string;
+    year: number;
+    chart_rank: number;
+  }
+  const normalized = artistName.trim().toLowerCase();
+  const pattern = `%${normalized}%`;
+  return all<Row>(
+    `
+    SELECT id, title, artist, year, chart_rank
+      FROM songs
+     WHERE LOWER(artist) = LOWER(?)
+        OR LOWER(artist) LIKE ?
+     ORDER BY year DESC, chart_rank ASC
+     LIMIT ?
+    `,
+    artistName,
+    pattern,
+    limit
+  ).map((r) => ({
+    songId: r.id,
+    title: r.title,
+    artist: r.artist,
+    year: r.year,
+    chartRank: r.chart_rank,
+  }));
+}
+
+export function getArtistThemeSignals(artistName: string, limit: number = 12): ArtistThemeSignal[] {
+  interface Row {
+    theme: string;
+    song_count: number;
+    avg_score: number;
+  }
+  const normalized = artistName.trim().toLowerCase();
+  const pattern = `%${normalized}%`;
+  return all<Row>(
+    `
+    SELECT ts.theme, COUNT(*) AS song_count, AVG(ts.score) AS avg_score
+      FROM theme_scores ts
+      JOIN songs s ON s.id = ts.song_id
+     WHERE LOWER(s.artist) = LOWER(?)
+        OR LOWER(s.artist) LIKE ?
+     GROUP BY ts.theme
+     ORDER BY avg_score DESC, song_count DESC
+     LIMIT ?
+    `,
+    artistName,
+    pattern,
+    limit
+  ).map((r) => ({
+    theme: r.theme,
+    songCount: r.song_count,
+    avgScore: r.avg_score,
+  }));
+}
+
+export function getArtistEventLinks(artistName: string, limit: number = 20): ArtistEventLink[] {
+  interface Row {
+    id: string;
+    name: string;
+    start_date: string;
+    category: string;
+    song_count: number;
+  }
+  const normalized = artistName.trim().toLowerCase();
+  const pattern = `%${normalized}%`;
+  return all<Row>(
+    `
+    SELECT ev.id, ev.name, ev.start_date, ev.category, COUNT(DISTINCT s.id) AS song_count
+      FROM songs s
+      JOIN graph_edges ge
+        ON ge.src_id = 'versesignal:n:song:' || s.id
+       AND ge.edge_type = 'associated_with_event'
+      JOIN events ev ON ev.id = SUBSTR(ge.dst_id, 21)
+     WHERE LOWER(s.artist) = LOWER(?)
+        OR LOWER(s.artist) LIKE ?
+     GROUP BY ev.id, ev.name, ev.start_date, ev.category
+     ORDER BY song_count DESC
+     LIMIT ?
+    `,
+    artistName,
+    pattern,
+    limit
+  ).map((r) => ({
+    id: r.id,
+    name: r.name,
+    startDate: r.start_date,
+    category: r.category,
+    songCount: r.song_count,
   }));
 }
 // === Year Signal Profiles (P1.1, lyrics-first signal engine) ===
@@ -1275,6 +1726,124 @@ export function getEventSignalDecay(eventId: string): EventSignalDecayYear[] {
     .sort((a, b) => a.year - b.year);
 }
 
+// === Event Lead/Lag Analysis (P2.3) ===
+
+export interface LeadSignal {
+  signalType: string;
+  signal: string;
+  preEventScore: number;
+  baselineScore: number;
+  delta: number;
+  correlatedDuringEvent: boolean;
+  eventCorrelationDelta: number | null;
+  directionallyConsistent: boolean; // same sign pre-event and during event = true lead
+}
+
+export interface EventLeadAnalysis {
+  eventId: string;
+  eventName: string;
+  preEventYear: number;
+  leadSignals: LeadSignal[];
+  totalCorrelatedSignals: number;
+  preElevatedSignals: number;
+  leadSignalRate: number; // fraction 0-1
+}
+
+/** Compute which signals were already elevated in the year BEFORE an event.
+ *
+ * For an event starting in year Y, compares year_signal_profiles for Y-1
+ * against the 3-year baseline. The lead signal rate measures how much music
+ * "sensed" the event coming — signals already deviating from baseline before
+ * the event was active.
+ */
+export function getEventLeadAnalysis(eventId: string, region: string = "US"): EventLeadAnalysis | null {
+  const event = getEventById(eventId);
+  if (!event) return null;
+  const startYear = parseInt(event.startDate, 10);
+  const preEventYear = startYear - 1;
+
+  // Get signal profiles for the pre-event year
+  interface ProfileRow {
+    signal_type: string;
+    signal: string;
+    score: number;
+    delta_vs_baseline: number | null;
+  }
+  const preEventSignals = all<ProfileRow>(
+    `SELECT signal_type, signal, score, delta_vs_baseline
+     FROM year_signal_profiles
+     WHERE year = ? AND region = ?
+     AND signal_type IN ('mood', 'theme', 'entity')
+     ORDER BY delta_vs_baseline DESC`,
+    preEventYear, region,
+  );
+  if (preEventSignals.length === 0) return null;
+
+  // Get top correlated signals for this event
+  const correlated = all<{ signal_type: string; signal: string; delta: number }>(
+    `SELECT DISTINCT csc.signal_type, csc.signal, csc.delta
+     FROM context_signal_correlations csc
+     WHERE csc.event_id = ?
+     ORDER BY ABS(csc.delta) DESC`,
+    eventId,
+  );
+  const correlatedSet = new Set(correlated.map((c) => `${c.signal_type}:${c.signal}`));
+  const correlatedMap = new Map(correlated.map((c) => [`${c.signal_type}:${c.signal}`, c.delta]));
+
+  // Build lead signals list.
+  // A signal counts as a "lead" only if it was elevated pre-event AND
+  // moved in the same direction during the event (consistent sign).
+  // This distinguishes anticipation (same direction) from independent drift.
+  const leadSignals: LeadSignal[] = [];
+  let preElevatedConsistentCount = 0;
+  let totalCheckableCorrelated = 0;
+
+  for (const ps of preEventSignals) {
+    const key = `${ps.signal_type}:${ps.signal}`;
+    const isDuring = correlatedSet.has(key);
+    const corrDelta = correlatedMap.get(key) ?? null;
+    const isElevated = ps.delta_vs_baseline !== null && ps.delta_vs_baseline > 0;
+
+    // Only show signals that are relevant (elevated pre-event or correlated during)
+    if (!isElevated && !isDuring) continue;
+
+    // Direction consistency: same sign => anticipation, opposite => drift
+    const consistent = isElevated && isDuring && corrDelta !== null
+      ? (ps.delta_vs_baseline! > 0 && corrDelta > 0) || (ps.delta_vs_baseline! < 0 && corrDelta < 0)
+      : false;
+
+    if (consistent) preElevatedConsistentCount++;
+    if (isDuring) totalCheckableCorrelated++;
+
+    leadSignals.push({
+      signalType: ps.signal_type,
+      signal: ps.signal,
+      preEventScore: ps.score,
+      baselineScore: ps.score - (ps.delta_vs_baseline ?? 0),
+      delta: ps.delta_vs_baseline ?? 0,
+      correlatedDuringEvent: isDuring,
+      eventCorrelationDelta: corrDelta,
+      directionallyConsistent: consistent,
+    });
+  }
+
+  leadSignals.sort((a, b) => {
+    if (a.correlatedDuringEvent !== b.correlatedDuringEvent) return a.correlatedDuringEvent ? -1 : 1;
+    return Math.abs(b.delta) - Math.abs(a.delta);
+  });
+
+  const totalCorrelatedSignals = correlated.length;
+  return {
+    eventId,
+    eventName: event.name,
+    preEventYear,
+    leadSignals: leadSignals.slice(0, 20),
+    totalCorrelatedSignals,
+    preElevatedSignals: preElevatedConsistentCount,
+    leadSignalRate: totalCheckableCorrelated > 0 ? preElevatedConsistentCount / totalCheckableCorrelated : 0,
+  };
+}
+
 /** Get all events that still have signal echoes in a given year (posture counts from songs of that year). */
 export function getEchoingEvents(year: number, region?: string): { eventId: string; eventName: string; eventStartYear: number; songCount: number; dominantPosture: string }[] {
   const rf = regionFilterClause(region);
@@ -1321,6 +1890,74 @@ export function getAllYears(region: string = "US"): { year: number; songCount: n
     ...(region === "GLOBAL" ? [] : [region]),
   );
   return rows.map((r) => ({ year: r.year, songCount: r.cnt }));
+}
+
+export interface YearAvailability {
+  year: number;
+  songCount: number;
+  hasLyrics: boolean;
+  hasThemes: boolean;
+  hasMoods: boolean;
+  hasEvents: boolean;
+  chartSource: string;
+  chartEra: ChartEra;
+}
+
+export function getYearAvailability(year: number, region: string = "US"): YearAvailability | null {
+  const row = get<{
+    year: number;
+    song_count: number;
+    chart_sources_json: string;
+    has_lyrics: number;
+    has_themes: number;
+    has_moods: number;
+    has_events: number;
+  }>(
+    `
+    WITH year_songs AS (
+      SELECT DISTINCT s.id AS song_id, s.chart_source
+      FROM songs s
+      WHERE s.year = ? AND s.region = ?
+    ),
+    y AS (
+      SELECT
+        COUNT(*) AS song_count,
+        GROUP_CONCAT(DISTINCT chart_source) AS chart_sources_json
+      FROM year_songs
+    ),
+    flags AS (
+      SELECT
+        EXISTS (SELECT 1 FROM lyric_lines ll JOIN year_songs ys ON ll.song_id = ys.song_id) AS has_lyrics,
+        EXISTS (SELECT 1 FROM theme_scores ts JOIN year_songs ys ON ts.song_id = ys.song_id) AS has_themes,
+        EXISTS (SELECT 1 FROM mood_scores ms JOIN year_songs ys ON ms.song_id = ys.song_id) AS has_moods,
+        EXISTS (SELECT 1 FROM cultural_posture cp JOIN year_songs ys ON cp.song_id = ys.song_id) AS has_events
+    )
+    SELECT
+      ? AS year,
+      y.song_count,
+      y.chart_sources_json,
+      f.has_lyrics AS has_lyrics,
+      f.has_themes AS has_themes,
+      f.has_moods AS has_moods,
+      f.has_events AS has_events
+    FROM y, flags f
+    `,
+    year,
+    region,
+    year,
+  );
+
+  if (!row || row.song_count === 0) return null;
+  return {
+    year: row.year,
+    songCount: row.song_count,
+    hasLyrics: Boolean(row.has_lyrics),
+    hasThemes: Boolean(row.has_themes),
+    hasMoods: Boolean(row.has_moods),
+    hasEvents: Boolean(row.has_events),
+    chartSource: row.chart_sources_json ? row.chart_sources_json.split(",")[0] : "manual",
+    chartEra: getChartEraForYear(row.year),
+  };
 }
 
 export interface DataHealth {

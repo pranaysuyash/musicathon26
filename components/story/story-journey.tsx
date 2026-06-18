@@ -65,6 +65,15 @@ export const STORY_JOURNEY: JourneyStep[] = [
     whyItMatters:
       "The song page shows: themes, moods, entities, event connections, similar songs, and the artist metadata. The graph is in every section.",
   },
+  {
+    step: 5,
+    title: "The Weeknd profile",
+    description:
+      "Aggregate the same evidence by artist to see theme affinity, linked events, and dataset breadth. Artists are now first-class investigation paths.",
+    href: "/artist/The%20Weeknd",
+    whyItMatters:
+      "The artist lens compresses song-level evidence and helps prove that our pipeline preserves continuity across tracks, not only individual hits.",
+  },
 ];
 
 export function StoryJourney() {
@@ -74,7 +83,7 @@ export function StoryJourney() {
         The story
       </h2>
       <p className="mt-1 text-sm text-ink-400">
-        A 4-step guided walkthrough of what the data shows.
+        A 5-step guided walkthrough of what the data shows.
       </p>
       <ol className="mt-4 space-y-3">
         {STORY_JOURNEY.map((s) => (

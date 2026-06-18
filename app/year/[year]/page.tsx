@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { getSongsByYear, getYearThemes, getYearMoods } from "@/lib/db/queries";
+import { getSongsByYear, getYearAvailability, getYearThemes, getYearMoods } from "@/lib/db/queries";
 
 export async function generateMetadata({
   params,
@@ -12,11 +12,13 @@ export async function generateMetadata({
   if (!Number.isFinite(year)) return { title: "Year not found" };
   return {
     title: `${year} — Top songs, themes, and moods`,
-    description: `Top 25 Billboard Hot 100 year-end songs from ${year}, with themes, moods, and the world events of the year.`,
+    description: `Top songs from ${year}, with themes, moods, and cultural context surfaces.`,
+    openGraph: {
+      images: [{ url: `/api/og?type=year&title=${encodeURIComponent(`${year} Top Songs`)}&subtitle=${encodeURIComponent(`The year ${year} in music: themes, moods, and cultural context`)}`, width: 1200, height: 630 }],
+    },
   };
 }
 import { initDb } from "@/lib/db";
-import { DEMO_YEARS } from "@/data/chart-seed";
 import { ThemeCloud } from "@/components/lens/theme-cloud";
 import { Pill, SectionTitle, ConfidenceBar } from "@/components/ui/primitives";
 import { THEME_LABELS, THEME_COLORS } from "@/lib/nlp/theme-scoring";
@@ -32,10 +34,12 @@ interface PageProps {
 export default function YearPage({ params }: PageProps) {
   initDb();
   const year = parseInt(params.year, 10);
-  if (!DEMO_YEARS.includes(year)) notFound();
+  const availability = getYearAvailability(year, "US");
+  if (!availability) notFound();
   const songs = getSongsByYear(year, "US");
   const themes = getYearThemes(year, "US", 8);
   const moods = getYearMoods(year, "US", 6);
+  const chartEra = availability.chartEra;
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
@@ -43,14 +47,15 @@ export default function YearPage({ params }: PageProps) {
       <header className="mt-4 mb-10">
         <div className="flex items-center gap-3">
           <Pill variant="signal">YEAR LENS</Pill>
-          <Pill variant="mute">U.S. Billboard Hot 100 · top 25</Pill>
+          <Pill variant="mute">{chartEra.label} · source: {chartEra.sourceMode}</Pill>
         </div>
         <h1 className="h-display mt-4 text-6xl font-semibold tracking-tight md:text-7xl">
           {year}
         </h1>
         <p className="mt-3 max-w-2xl text-ink-300 text-pretty">
-          {songs.length} charting songs, scored against a 19-theme lexicon and a 384-dim semantic
-          embedding. Click a theme to see which songs drove it.
+          {songs.length} charting songs in a {chartEra.label.toLowerCase()} context.
+          Scores come from the 19-theme lexicon and 384-dim semantic embedding.
+          This page is data-first; for discovery-first context, start from <Link href={`/lens/${year}`} className="underline decoration-dotted">/lens/{year}</Link>.
         </p>
       </header>
 

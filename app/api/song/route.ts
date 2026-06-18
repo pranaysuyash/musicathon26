@@ -11,7 +11,16 @@ export const dynamic = "force-dynamic";
 interface ThemeRow { theme: string; score: number; confidence: number; evidence_terms: string | null; source: string }
 interface MoodRow { mood: string; score: number; source: string }
 interface EntityRow { entity_id: string; canonical_name: string; entity_type: string; surface_form: string | null; confidence: number; source: string; line_index: number | null }
-interface EventLinkRow { event_id: string; event_name: string; weight: number; explanation: string | null; confidence: number; edge_id: string }
+interface EventLinkRow {
+  event_id: string;
+  event_name: string;
+  weight: number;
+  explanation: string | null;
+  confidence: number;
+  edge_id: string;
+  evidence_count: number;
+  evidence_sources: string | null;
+}
 interface CountRow { c: number }
 
 export async function GET(req: Request) {
@@ -52,12 +61,16 @@ export async function GET(req: Request) {
   );
 
   const eventLinks = all<EventLinkRow>(
-    `SELECT ge.dst_id AS event_id, ev.name AS event_name, ge.weight, ge.explanation, ge.confidence, ge.id AS edge_id
+    `SELECT SUBSTR(ge.dst_id, LENGTH('versesignal:n:event:') + 1) AS event_id,
+            ev.name AS event_name,
+            ge.weight, ge.explanation, ge.confidence, ge.id AS edge_id,
+            (SELECT COUNT(*) FROM evidence ee WHERE ee.edge_id = ge.id) AS evidence_count,
+            (SELECT GROUP_CONCAT(DISTINCT ee.source) FROM evidence ee WHERE ee.edge_id = ge.id) AS evidence_sources
        FROM graph_edges ge
-       JOIN events ev ON ev.id = ge.dst_id
+       JOIN events ev ON ev.id = SUBSTR(ge.dst_id, LENGTH('versesignal:n:event:') + 1)
       WHERE ge.src_id = ? AND ge.edge_type = 'associated_with_event'
       ORDER BY ge.weight DESC`,
-    song.id
+    `versesignal:n:song:${song.id}`
   );
 
   const lyricLineCount = get<CountRow>(`SELECT COUNT(*) AS c FROM lyric_lines WHERE song_id = ?`, song.id)?.c ?? 0;

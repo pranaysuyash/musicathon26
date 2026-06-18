@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ConfidenceBar, Pill } from "@/components/ui/primitives";
 import type { GraphNode, GraphEdge } from "@/lib/types";
 
@@ -20,10 +20,40 @@ interface PathApiResponse {
   };
 }
 
+type AskCandidate = {
+  id: string;
+  nodeType: GraphNode["nodeType"];
+  label: string;
+};
+
+type AskResolvedNode = {
+  query: string;
+  resolvedId: string | null;
+  resolvedLabel: string | null;
+  resolvedNodeType: GraphNode["nodeType"] | null;
+  candidates: AskCandidate[];
+  suggestion?: string;
+};
+
+interface AskApiResponse extends PathApiResponse {
+  input: string;
+  resolved: {
+    from: AskResolvedNode;
+    to: AskResolvedNode;
+  };
+}
+
 interface Props {
   initialFromId?: string;
   initialToId?: string;
+  initialAsk?: string;
 }
+
+const ASK_EXAMPLES = [
+  "Find a path from Blinding Lights to COVID-19",
+  "Connect 2020 and Ukraine war",
+  "Show a path between loneliness and escape",
+];
 
 const EDGE_TYPES = [
   { value: "associated_with_event", label: "Event" },
@@ -33,15 +63,20 @@ const EDGE_TYPES = [
   { value: "performed_by", label: "Artist" },
 ];
 
-export function PathPanel({ initialFromId, initialToId }: Props) {
+export function PathPanel({ initialFromId, initialToId, initialAsk }: Props) {
   const [from, setFrom] = useState(initialFromId ?? "");
   const [to, setTo] = useState(initialToId ?? "");
   const [edgeTypes, setEdgeTypes] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<PathApiResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [askInput, setAskInput] = useState("");
+  const lastAutoAsk = useRef<string | null>(null);
+  const [askResolution, setAskResolution] = useState<{
+    from: AskResolvedNode;
+    to: AskResolvedNode;
+  } | null>(null);
 
-  // Curated "interesting" starting pairs so demo doesn't need autocomplete
   const presets: Array<{ label: string; from: string; to: string }> = [
     {
       label: "Blinding Lights → COVID-19",
@@ -81,6 +116,7 @@ export function PathPanel({ initialFromId, initialToId }: Props) {
       if (!r.ok) throw new Error(`path query failed: ${r.status}`);
       const j = (await r.json()) as PathApiResponse;
       setData(j);
+      setAskResolution(null);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -88,8 +124,138 @@ export function PathPanel({ initialFromId, initialToId }: Props) {
     }
   }
 
+  const runAsk = useCallback(
+    async (question?: string) => {
+      const query = question?.trim() ?? askInput.trim();
+      if (!query) return;
+      setLoading(true);
+      setError(null);
+      try {
+        const params = new URLSearchParams({ q: query, maxHops: "6" });
+        for (const et of edgeTypes) params.append("edgeType", et);
+        const r = await fetch(`/api/graph-ask?${params}`);
+        const j =
+          (await r.json()) as
+            | (AskApiResponse & {
+                error?: string;
+                message?: string;
+                resolved?: {
+                  from: AskResolvedNode | null;
+                  to: AskResolvedNode | null;
+                };
+              })
+            | (PathApiResponse & {
+                error?: string;
+                message?: string;
+                resolved?: never;
+              });
+        if (!r.ok) {
+          if (j.resolved) {
+            const resolvedFrom = j.resolved.from;
+            const resolvedTo = j.resolved.to;
+            if (resolvedFrom && resolvedTo) {
+              setAskResolution({
+                from: resolvedFrom as AskResolvedNode,
+                to: resolvedTo as AskResolvedNode,
+              });
+            }
+          }
+          if (j.error) {
+            throw new Error((j as { message?: string }).message ?? j.error);
+          }
+          throw new Error("Graph ask failed");
+        }
+        if (!("resolved" in j) || !("from" in j) || !("to" in j)) {
+          throw new Error("Unexpected graph ask response");
+        }
+        const typed = j as AskApiResponse;
+        setData({
+          from: typed.from,
+          to: typed.to,
+          result: typed.result,
+        });
+        setFrom(typed.from.id);
+        setTo(typed.to.id);
+        setAskResolution(typed.resolved);
+      } catch (err) {
+        setError((err as Error).message);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [askInput, edgeTypes]
+  );
+
+  useEffect(() => {
+    if (!initialAsk?.trim()) return;
+    const normalized = initialAsk.trim();
+    if (lastAutoAsk.current === normalized) return;
+    lastAutoAsk.current = normalized;
+    if (askInput !== normalized) {
+      setAskInput(normalized);
+    }
+    void runAsk(normalized);
+  }, [initialAsk, runAsk]);
+
   return (
     <div className="card p-5">
+      <div className="mb-6">
+        <div className="mb-3 flex items-center gap-2">
+          <Pill variant="signal">ASK MODE</Pill>
+          <span className="text-xs text-ink-400">
+            Ask in plain language. Example: “connect 2020 and Ukraine war”
+          </span>
+        </div>
+        <label className="block">
+          <span className="text-xs uppercase tracking-wider text-ink-500">Ask the graph</span>
+          <textarea
+            value={askInput}
+            onChange={(e) => setAskInput(e.target.value)}
+            placeholder='Try "Show a path from 2020 to Ukraine war"'
+            rows={2}
+            className="mt-1 w-full rounded border border-ink-800 bg-ink-900/60 px-3 py-2 text-sm text-ink-100 placeholder:text-ink-600 focus:border-signal-500 focus:outline-none"
+          />
+        </label>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button
+            onClick={runAsk}
+            disabled={loading || !askInput.trim()}
+            className="rounded-lg bg-signal-500 px-4 py-2 text-sm font-medium text-ink-950 transition hover:bg-signal-400 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {loading ? "Searching…" : "Ask graph"}
+          </button>
+          <span className="text-xs text-ink-500">Examples:</span>
+          {ASK_EXAMPLES.map((text) => (
+            <button
+              key={text}
+              type="button"
+              onClick={() => setAskInput(text)}
+              className="pill pill-mute hover:bg-ink-700"
+            >
+              {text}
+            </button>
+          ))}
+        </div>
+        {askResolution ? (
+          <div className="mt-3 text-xs text-ink-400">
+            <p>
+              <span className="text-ink-500">Resolved:</span>{" "}
+              <span className="text-ink-100">{askResolution.from.resolvedLabel ?? "Unresolved"}</span>
+              {" → "}
+              <span className="text-ink-100">{askResolution.to.resolvedLabel ?? "Unresolved"}</span>
+            </p>
+            {askResolution.from.suggestion ? (
+              <p className="mt-1 text-amber-300">Tip: {askResolution.from.suggestion}</p>
+            ) : null}
+            {askResolution.from.candidates.length > 1 ? (
+              <p className="mt-1 text-ink-500">
+                Multiple matches. Use a typed prompt like “song X” or “event X” for precision.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+
       <div className="mb-4 flex items-center gap-2">
         <Pill variant="signal">PATH MODE</Pill>
         <span className="text-xs text-ink-400">Shortest path between two graph nodes (BFS, ≤6 hops).</span>
@@ -125,6 +291,7 @@ export function PathPanel({ initialFromId, initialToId }: Props) {
               setFrom(p.from);
               setTo(p.to);
             }}
+            type="button"
             className="pill pill-mute hover:bg-ink-700"
           >
             {p.label}
@@ -185,7 +352,8 @@ export function PathPanel({ initialFromId, initialToId }: Props) {
         <div className="mt-5 space-y-3">
           <div className="text-xs text-ink-400">
             {data.result.hopCount} hop{data.result.hopCount === 1 ? "" : "s"} ·
-            {" "}avg confidence {data.result.avgConfidence.toFixed(2)} · {data.result.exploredNodes} nodes explored
+            {" "}
+            avg confidence {data.result.avgConfidence.toFixed(2)} · {data.result.exploredNodes} nodes explored
           </div>
           <ol className="space-y-2">
             {data.result.nodes.map((node, i) => {

@@ -8,7 +8,7 @@ export async function generateMetadata({
 }: {
   params: { id: string };
 }): Promise<Metadata> {
-  const song = getSongById(decodeURIComponent(params.id));
+  const song = getSongById(decodeRouteParam(params.id));
   if (!song) return { title: "Song not found" };
   return {
     title: `${song.title} — ${song.artist} (${song.year})`,
@@ -23,6 +23,14 @@ import type { Theme } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
+function decodeRouteParam(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 interface PageProps {
   params: { id: string };
 }
@@ -31,14 +39,22 @@ interface LyricRow { line_index: number; text: string; section: string | null; h
 interface ThemeRow { theme: string; score: number; confidence: number; evidence_terms: string | null; source: string }
 interface MoodRow { mood: string; score: number; source: string }
 interface EntityRow { entity_id: string; canonical_name: string; entity_type: string; surface_form: string | null; confidence: number; source: string; line_index: number | null }
-interface EventLinkRow { event_id: string; event_name: string; weight: number; explanation: string | null; confidence: number }
+interface EventLinkRow {
+  event_id: string;
+  event_name: string;
+  weight: number;
+  explanation: string | null;
+  confidence: number;
+  edge_id: string;
+  evidence_count: number;
+  evidence_sources: string | null;
+}
 
 export default function SongPage({ params }: PageProps) {
   initDb();
-  const id = decodeURIComponent(params.id);
+  const id = decodeRouteParam(params.id);
   const song = getSongById(id);
   if (!song) notFound();
-  const db = initDb;
 
   const themes = all<ThemeRow>(
     `SELECT theme, score, confidence, evidence_terms_json AS evidence_terms, source FROM theme_scores WHERE song_id = ? ORDER BY score DESC`,
@@ -67,6 +83,14 @@ export default function SongPage({ params }: PageProps) {
 
   const similarSongs = getSimilarSongs(song.id, 6);
 
+  const entitiesByLine = new Map<number, EntityRow[]>();
+  for (const entity of entities) {
+    if (entity.line_index === null) continue;
+    const list = entitiesByLine.get(entity.line_index) ?? [];
+    list.push(entity);
+    entitiesByLine.set(entity.line_index, list);
+  }
+
   // Look up artist metadata. The songs.artist field may have
   // "X, Y featuring Z"; for the metadata lookup we use the
   // primary artist (everything before the first "featuring/&/").
@@ -85,11 +109,13 @@ export default function SongPage({ params }: PageProps) {
     // to match. The `/event/[id]` page already does this
     // correctly; the song page was inconsistent.
     `SELECT SUBSTR(ge.dst_id, 21) AS event_id, ev.name AS event_name,
-            ge.weight, ge.explanation, ge.confidence
+            ge.weight, ge.explanation, ge.confidence, ge.id AS edge_id,
+            (SELECT COUNT(*) FROM evidence ee WHERE ee.edge_id = ge.id) AS evidence_count,
+            (SELECT GROUP_CONCAT(DISTINCT ee.source) FROM evidence ee WHERE ee.edge_id = ge.id) AS evidence_sources
        FROM graph_edges ge JOIN events ev ON ev.id = SUBSTR(ge.dst_id, 21)
-      WHERE ge.src_id = ? AND ge.edge_type = 'associated_with_event'
+     WHERE ge.src_id = ? AND ge.edge_type = 'associated_with_event'
       ORDER BY ge.weight DESC`,
-    song.id
+    `versesignal:n:song:${song.id}`
   );
 
   return (
@@ -117,7 +143,7 @@ export default function SongPage({ params }: PageProps) {
               ) : (
                 <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-ink-200">
                   {lyrics.map((l) => {
-                    const entOnLine = entities.filter((e) => e.line_index === l.line_index);
+                    const entOnLine = entitiesByLine.get(l.line_index) ?? [];
                     return (
                       <span key={l.line_index} className="block">
                         <span className="mr-3 inline-block w-8 text-right text-[10px] tabular-nums text-ink-500">
@@ -200,6 +226,12 @@ export default function SongPage({ params }: PageProps) {
 
           <section>
             <SectionTitle>Artist ({primaryArtist})</SectionTitle>
+            <Link
+              href={`/artist/${encodeURIComponent(primaryArtist)}`}
+              className="mb-2 inline-block text-sm text-signal-300 hover:underline"
+            >
+              Open artist profile →
+            </Link>
             {artistMeta ? (
               <div className="card p-4 text-sm">
                 <div className="flex flex-wrap items-center gap-2">
@@ -210,14 +242,18 @@ export default function SongPage({ params }: PageProps) {
                 <dl className="mt-3 grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-3">
                   <dt className="text-ink-500">JamBase ID</dt>
                   <dd className="sm:col-span-2">
-                    <a
-                      href={`https://www.jambase.com/band/${artistMeta.jambase_id.replace("jambase:", "")}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-signal-300 hover:underline"
-                    >
-                      {artistMeta.jambase_id} ↗
-                    </a>
+                    {artistMeta.jambase_id ? (
+                      <a
+                        href={`https://www.jambase.com/band/${artistMeta.jambase_id.replace("jambase:", "")}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-signal-300 hover:underline"
+                      >
+                        {artistMeta.jambase_id} ↗
+                      </a>
+                    ) : (
+                      <span className="text-ink-500">not linked</span>
+                    )}
                   </dd>
                   {artistMeta.musicbrainz_id ? (
                     <>
@@ -268,7 +304,12 @@ export default function SongPage({ params }: PageProps) {
                 entities.slice(0, 30).map((e) => (
                   <li key={e.entity_id} className="flex items-center gap-2 p-3 text-xs">
                     <Pill variant="echo">{e.entity_type.replace(/_/g, " ")}</Pill>
-                    <span className="flex-1 truncate text-ink-100">{e.canonical_name}</span>
+                    <Link
+                      href={`/entity/${encodeURIComponent(e.entity_id)}`}
+                      className="flex-1 truncate text-ink-100 underline-offset-2 hover:underline"
+                    >
+                      {e.canonical_name}
+                    </Link>
                     <span className="text-ink-500">{(e.confidence * 100).toFixed(0)}%</span>
                   </li>
                 ))
@@ -292,8 +333,19 @@ export default function SongPage({ params }: PageProps) {
                     </Link>
                     <div className="mt-1 flex items-center gap-2">
                       <ConfidenceBar value={e.weight} />
+                      <span className="text-xs text-ink-500">{(e.confidence * 100).toFixed(0)}% conf</span>
+                      <Pill variant={e.evidence_count > 0 ? "signal" : "warn"}>
+                        {e.evidence_count} evidence {e.evidence_count === 1 ? "row" : "rows"}
+                      </Pill>
                     </div>
                     {e.explanation ? <p className="mt-1 text-ink-500 italic">{e.explanation}</p> : null}
+                    {e.evidence_sources ? (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {e.evidence_sources.split(",").map((source) => (
+                          <Pill key={source} variant="mute">{source}</Pill>
+                        ))}
+                      </div>
+                    ) : null}
                   </li>
                 ))
               )}

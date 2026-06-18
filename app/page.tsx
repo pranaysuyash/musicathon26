@@ -1,31 +1,31 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { getAllEvents, getSongsByYear } from "@/lib/db/queries";
+import { getAllEvents, getAllYears } from "@/lib/db/queries";
 import { initDb } from "@/lib/db";
 import { StoryJourney } from "@/components/story/story-journey";
 
 export const metadata: Metadata = {
   title: "Songs by year, themes, and world events",
   description:
-    "Browse 150 Billboard Hot 100 year-end songs (2018–2023) through the lens of lyrics, themes, artists, moods, and world events.",
+    "Browse the current 2018–2023 seeded demo slice of the long-term VerseSignal corpus (1960s–2023) through the lens of lyrics, themes, artists, moods, and world events.",
+  openGraph: {
+    images: [{ url: "/api/og?type=default", width: 1200, height: 630 }],
+  },
 };
-import { ThemeCloud } from "@/components/lens/theme-cloud";
-import { DEMO_YEARS } from "@/data/chart-seed";
-
 export const dynamic = "force-dynamic";
 
 export default function Home() {
   initDb();
   const events = getAllEvents();
-  const yearCounts = DEMO_YEARS.map((y) => ({ year: y, count: getSongsByYear(y).length }));
+  const yearCounts = getAllYears("US");
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-12">
       <header className="mb-16">
         <div className="flex items-center gap-3 text-xs text-ink-400">
-          <span className="pill pill-signal">MUSICATHON 2026</span>
+          <span className="pill pill-signal">VerseSignal</span>
           <span>·</span>
-          <span>Musicathon is live. Build week in progress.</span>
+          <span>VerseSignal demo lane is live.</span>
         </div>
         <h1 className="h-display mt-6 text-5xl font-semibold leading-[1.05] md:text-7xl">
           When the world was going
@@ -34,10 +34,18 @@ export default function Home() {
           <span className="gradient-text">what was it singing?</span>
         </h1>
         <p className="mt-6 max-w-2xl text-lg text-ink-300 text-pretty">
-          VerseSignal is a navigable knowledge graph of charting pop music from 2018 to today.
+          VerseSignal is a long-term cultural music atlas: target scope is 1960s–2023,
+          staged by chart era. The shipped demo slice is 2018–2023.
           Every song connects to lyrics, themes, named entities, moods, collaborators, and the
           world events that overlapped its chart window. Every edge carries evidence and a
           confidence score.
+        </p>
+        <p className="mt-3 max-w-2xl text-sm text-ink-400">
+          Era strategy:
+          1960s–1970s (US chart-memory mode),
+          1980s–1990s (US + MTV/radio-era enrichment),
+          2000s–2010s (US chart transition to streaming),
+          2020–2023 (Billboard Global 200 + streaming-era context).
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
           <Link
@@ -58,11 +66,29 @@ export default function Home() {
           >
             Open Graph Explorer
           </Link>
+          <Link
+            href="/ask"
+            className="rounded-lg border border-ink-700 bg-ink-800/60 px-5 py-2.5 text-sm font-medium text-ink-100 transition hover:border-ink-600 hover:bg-ink-800"
+          >
+            Ask the Graph
+          </Link>
+          <Link
+            href="/globe"
+            className="rounded-lg border border-ink-700 bg-ink-800/60 px-5 py-2.5 text-sm font-medium text-ink-100 transition hover:border-ink-600 hover:bg-ink-800"
+          >
+            Cultural Weather Map
+          </Link>
+          <Link
+            href="/scrub"
+            className="rounded-lg border border-ink-700 bg-ink-800/60 px-5 py-2.5 text-sm font-medium text-ink-100 transition hover:border-ink-600 hover:bg-ink-800"
+          >
+            Timeline Scrubber
+          </Link>
         </div>
       </header>
 
       <section className="mb-16 grid grid-cols-1 gap-4 md:grid-cols-3">
-        <Stat label="Songs indexed" value={yearCounts.reduce((a, b) => a + b.count, 0).toString()} />
+        <Stat label="Songs indexed" value={yearCounts.reduce((a, b) => a + b.songCount, 0).toString()} />
         <Stat label="Years covered" value={yearCounts.length.toString()} />
         <Stat label="Curated events" value={events.length.toString()} />
       </section>
@@ -77,7 +103,7 @@ export default function Home() {
               className="card card-hover group flex flex-col items-start p-5"
             >
               <div className="text-3xl font-semibold tracking-tight">{y.year}</div>
-              <div className="mt-1 text-xs text-ink-400">{y.count} songs</div>
+              <div className="mt-1 text-xs text-ink-400">{y.songCount} songs</div>
               <div className="mt-3 h-1 w-full overflow-hidden rounded bg-ink-800">
                 <div
                   className="h-full bg-gradient-to-r from-signal-500 to-echo-500 opacity-70 group-hover:opacity-100"
