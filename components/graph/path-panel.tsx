@@ -25,6 +25,14 @@ interface Props {
   initialToId?: string;
 }
 
+const EDGE_TYPES = [
+  { value: "associated_with_event", label: "Event" },
+  { value: "contains_theme", label: "Theme" },
+  { value: "mentions_entity", label: "Entity" },
+  { value: "similar_to", label: "Similar" },
+  { value: "performed_by", label: "Artist" },
+];
+
 export function PathPanel({ initialFromId, initialToId }: Props) {
   const [from, setFrom] = useState(initialFromId ?? "");
   const [to, setTo] = useState(initialToId ?? "");
@@ -46,9 +54,9 @@ export function PathPanel({ initialFromId, initialToId }: Props) {
       to: "versesignal:n:song:versesignal:2022:01:heat-waves-glass-animals",
     },
     {
-      label: "God's Plan → Hope (theme)",
+      label: "God's Plan → violence (theme)",
       from: "versesignal:n:song:versesignal:2018:01:gods-plan-drake",
-      to: "versesignal:n:theme:hope",
+      to: "versesignal:n:theme:violence",
     },
     {
       label: "Levitating (Dua Lipa) → Ukraine war",
@@ -122,6 +130,36 @@ export function PathPanel({ initialFromId, initialToId }: Props) {
             {p.label}
           </button>
         ))}
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <span className="text-xs uppercase tracking-wider text-ink-500">Edge types:</span>
+        {EDGE_TYPES.map((t) => {
+          const active = edgeTypes.includes(t.value);
+          return (
+            <button
+              key={t.value}
+              type="button"
+              onClick={() =>
+                setEdgeTypes(
+                  active ? edgeTypes.filter((x) => x !== t.value) : [...edgeTypes, t.value]
+                )
+              }
+              className={`pill ${active ? "pill-signal" : "pill-mute"}`}
+            >
+              {t.label}
+            </button>
+          );
+        })}
+        {edgeTypes.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => setEdgeTypes([])}
+            className="pill pill-warn ml-1"
+          >
+            clear
+          </button>
+        ) : null}
       </div>
 
       <div className="mt-3 flex items-center gap-2">

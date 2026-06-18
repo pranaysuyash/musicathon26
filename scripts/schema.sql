@@ -76,7 +76,9 @@ CREATE TABLE IF NOT EXISTS entities (
   entity_type TEXT NOT NULL,               -- person | artist | place | city | country | brand | religious_figure | political_figure | song_title | album_title | event_reference | drug_or_substance | technology | sports_reference | mythological_reference
   wikidata_id TEXT,
   musicbrainz_id TEXT,
-  musicbrainz_artist_type TEXT,            -- person | group | orchestra | ...
+  musicbrainz_artist_type TEXT,
+  jambase_id TEXT,
+  jambase_genres_json TEXT,  -- JSON array, e.g. ["hip-hop-rap", "pop"]            -- person | group | orchestra | ...
   aliases_json TEXT,                       -- JSON array
   metadata_json TEXT
 );
@@ -197,6 +199,61 @@ CREATE TABLE IF NOT EXISTS evidence (
 CREATE INDEX IF NOT EXISTS idx_ev_edge ON evidence(edge_id);
 
 -- ============================================================
+-- signal_clusters (P1.2, lyrics-first co-occurrence)
+CREATE TABLE IF NOT EXISTS signal_clusters (
+  id TEXT PRIMARY KEY,
+  year INTEGER NOT NULL,
+  region TEXT NOT NULL DEFAULT 'US',
+  label TEXT,
+  description TEXT,
+  signal_count INTEGER NOT NULL,
+  song_count INTEGER NOT NULL,
+  signals_json TEXT NOT NULL,
+  song_ids_json TEXT,
+  confidence REAL NOT NULL,
+  computed_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_sc_year ON signal_clusters(year, region);
+
+-- cultural_posture (P1.4, song-event relationship classifier)
+CREATE TABLE IF NOT EXISTS cultural_posture (
+  id TEXT PRIMARY KEY,
+  song_id TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  posture TEXT NOT NULL,
+  score REAL NOT NULL,
+  rationale TEXT,
+  evidence_json TEXT,
+  source_api TEXT NOT NULL DEFAULT 'rule',
+  computed_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (song_id, event_id)
+);
+CREATE INDEX IF NOT EXISTS idx_cp_event ON cultural_posture(event_id);
+CREATE INDEX IF NOT EXISTS idx_cp_song ON cultural_posture(song_id);
+CREATE INDEX IF NOT EXISTS idx_cp_posture ON cultural_posture(event_id, posture);
+
+-- context_signal_correlations (P2.2, tone-context correlation)
+-- For each (event, signal) pair, the baseline mean (3 years
+-- before) and the event-period score, plus the delta. This
+-- answers: 'Did chart music's signals shift during this
+-- event, vs the surrounding baseline?'
+CREATE TABLE IF NOT EXISTS context_signal_correlations (
+  id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL,
+  year INTEGER NOT NULL,
+  signal_type TEXT NOT NULL,
+  signal TEXT NOT NULL,
+  baseline_mean REAL NOT NULL,
+  event_period_score REAL NOT NULL,
+  delta REAL NOT NULL,
+  confidence REAL NOT NULL,
+  evidence_song_ids_json TEXT,
+  computed_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (event_id, year, signal_type, signal)
+);
+CREATE INDEX IF NOT EXISTS idx_csc_event ON context_signal_correlations(event_id, year);
+CREATE INDEX IF NOT EXISTS idx_csc_year ON context_signal_correlations(year, signal_type);
+
 -- Inserts (curated event seed for the demo window 2018–2023)
 -- ============================================================
 
@@ -251,3 +308,84 @@ INSERT OR IGNORE INTO events (id, name, start_date, end_date, regions_json, cate
    '["metoo", "harassment", "assault", "consent", "survivor", "silence", "speak"]',
    'Continued reverberations of the MeToo movement; industry reckonings and survivor accounts.',
    '["identity", "protest", "hope", "violence", "grief"]', 0.7);
+
+-- ============================================================
+-- Path query audit log (P7.2 observability)
+-- One row per /api/path call. Per 0.10, the operator should be
+-- able to answer: who asked what, when, with what input, with
+-- what result, in how long.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS path_queries (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts            TEXT NOT NULL DEFAULT (datetime('now')),
+  from_id       TEXT NOT NULL,
+  to_id         TEXT NOT NULL,
+  edge_types_json TEXT,             -- JSON array, NULL = all edges
+  max_hops      INTEGER NOT NULL DEFAULT 6,
+  found         INTEGER NOT NULL,   -- 0 or 1
+  hop_count     INTEGER,
+  total_weight  REAL,
+  avg_confidence REAL,
+  explored_nodes INTEGER,
+  elapsed_ms    REAL,
+  reason        TEXT,                -- "no_path" | "same_node" | "not_found" | "too_long" | "timeout"
+  ip_hash       TEXT,                -- sha256(ip), no raw IP per 0.11 / privacy
+  user_agent    TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_path_queries_ts ON path_queries(ts);
+CREATE INDEX IF NOT EXISTS idx_path_queries_from ON path_queries(from_id);
+CREATE INDEX IF NOT EXISTS idx_path_queries_to ON path_queries(to_id);
+
+-- year_signal_profiles (P1.1, lyrics-first signal engine)
+-- Per 1st principles, this is the data foundation for the
+-- Cultural Lens: it aggregates theme/mood/entity signals by
+-- year + region, so the lens can answer "What were the
+-- charts saying in 2020?" before showing event overlays.
+CREATE TABLE IF NOT EXISTS year_signal_profiles (
+  id TEXT PRIMARY KEY,                -- versesignal:ysp:<year>:<region>:<type>:<signal>
+  year INTEGER NOT NULL,
+  region TEXT NOT NULL DEFAULT 'US',  -- US / global / region-code
+  signal_type TEXT NOT NULL,          -- theme | mood | entity | phrase | place | brand
+  signal TEXT NOT NULL,               -- e.g., 'love', 'loneliness', 'Benz', 'Henny'
+  score REAL NOT NULL,                -- aggregate score (sum or mean over songs)
+  song_count INTEGER NOT NULL,        -- how many songs drove the signal
+  delta_vs_prev_year REAL,            -- % change vs prior year
+  delta_vs_baseline REAL,             -- % change vs 3-year baseline
+  evidence_song_ids_json TEXT,        -- JSON array of song IDs
+  source_api TEXT NOT NULL,            -- 'theme_scores' | 'mood_scores' | 'entity_mentions' | 'hybrid'
+  computed_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (year, region, signal_type, signal)
+);
+CREATE INDEX IF NOT EXISTS idx_ysp_year_type ON year_signal_profiles(year, region, signal_type);
+CREATE INDEX IF NOT EXISTS idx_ysp_score ON year_signal_profiles(year, region, score DESC);
+
+-- ============================================================
+-- candidate_contexts (P1.3, per-cluster explanations)
+-- For each signal cluster, this table stores a human-readable
+-- explanation of WHY these signals co-occur, grounded in the
+-- year's events, the cluster's cultural posture, and its
+-- relationship to the year's signal baseline.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS candidate_contexts (
+  id TEXT PRIMARY KEY,              -- versesignal:ctx:<cluster-id>
+  cluster_id TEXT NOT NULL,         -- FK to signal_clusters.id
+  year INTEGER NOT NULL,
+  region TEXT NOT NULL DEFAULT 'US',
+  explanation TEXT NOT NULL,        -- human-readable "why these signals cluster"
+  explanation_short TEXT,           -- tweet-length version
+  dominant_posture TEXT,            -- the most common posture for songs in this cluster
+  posture_distribution_json TEXT,   -- JSON: {posture: count, ...}
+  trigger_event_ids_json TEXT,      -- JSON array of event IDs related to this context
+  cross_year_type TEXT,             -- persistent | emergent | cyclic | transient
+  cross_year_evidence TEXT,         -- short note about cross-year pattern
+  comparative_signals_json TEXT,    -- JSON: [{type, signal, cluster_weight, year_baseline, lift}]
+  evidence TEXT,                    -- short rationale for the context generation
+  confidence REAL NOT NULL,         -- 0..1 how confident in this explanation
+  computed_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_candidate_contexts_year ON candidate_contexts(year, region);
+CREATE INDEX IF NOT EXISTS idx_candidate_contexts_cluster ON candidate_contexts(cluster_id);
+
+

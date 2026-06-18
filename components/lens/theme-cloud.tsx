@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { THEME_COLORS, THEME_LABELS, THEME_DESCRIPTIONS } from "@/lib/nlp/theme-scoring";
 import type { Theme } from "@/lib/types";
 
@@ -10,7 +11,7 @@ interface ThemeCloudItem {
   evidenceSongIds: string[];
 }
 
-export function ThemeCloud({ items, onSelect }: { items: ThemeCloudItem[]; onSelect?: (theme: Theme) => void }) {
+export function ThemeCloud({ items }: { items: ThemeCloudItem[] }) {
   const [hover, setHover] = useState<string | null>(null);
   const max = useMemo(() => Math.max(1, ...items.map((i) => i.avgScore)), [items]);
   const sorted = useMemo(() => [...items].sort((a, b) => b.avgScore - a.avgScore), [items]);
@@ -32,12 +33,12 @@ export function ThemeCloud({ items, onSelect }: { items: ThemeCloudItem[]; onSel
           const color = THEME_COLORS[t] ?? "#7dd3fc";
           const isHover = hover === item.theme;
           return (
-            <button
+            <Link
               key={item.theme}
-              onClick={() => onSelect?.(t)}
+              href={`/theme/${item.theme}`}
               onMouseEnter={() => setHover(item.theme)}
               onMouseLeave={() => setHover(null)}
-              className="rounded-full border px-3 py-1.5 text-sm font-medium transition"
+              className="rounded-full border px-3 py-1.5 text-sm font-medium transition no-underline"
               style={{
                 fontSize: `${size}rem`,
                 color: isHover ? "#fff" : color,
@@ -49,7 +50,7 @@ export function ThemeCloud({ items, onSelect }: { items: ThemeCloudItem[]; onSel
               <span className="ml-1.5 text-[10px] tabular-nums opacity-60">
                 {item.avgScore.toFixed(1)}
               </span>
-            </button>
+            </Link>
           );
         })}
       </div>

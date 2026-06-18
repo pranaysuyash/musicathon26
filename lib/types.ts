@@ -157,17 +157,32 @@ export type EdgeType =
   | "thematic_bridge"
   | "contains_word";
 
+// SourceApi: every value the DB actually contains, plus
+// the values declared in the union but not yet seeded.
+// Per 1st principles, this is the single source of truth:
+// every write site must use a value in this list, and the
+// DB integrity test (tests/test_graph_integrity.py) checks
+// no other values are present.
 export type SourceApi =
+  // Data sources (provenance)
   | "musixmatch"
   | "songstats"
+  | "billboard"
+  | "musicbrainz"
+  | "wikidata"
+  | "jam_base"
+  | "jambase"
+  | "cyanite"
+  | "elevenlabs"
+  | "manual"
+  // Analysis / extraction
   | "spacy"
   | "gliner"
   | "embedding"
   | "llm"
   | "lexicon"
-  | "cyanite"
-  | "musicbrainz"
-  | "wikidata"
+  // Aggregation
+  | "hybrid"
   | "human";
 
 export type EvidenceType =

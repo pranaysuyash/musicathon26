@@ -1,6 +1,20 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import type { Metadata } from "next";
 import { getSongsByYear, getYearThemes, getYearMoods } from "@/lib/db/queries";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: { year: string };
+}): Promise<Metadata> {
+  const year = Number(params.year);
+  if (!Number.isFinite(year)) return { title: "Year not found" };
+  return {
+    title: `${year} — Top songs, themes, and moods`,
+    description: `Top 25 Billboard Hot 100 year-end songs from ${year}, with themes, moods, and the world events of the year.`,
+  };
+}
 import { initDb } from "@/lib/db";
 import { DEMO_YEARS } from "@/data/chart-seed";
 import { ThemeCloud } from "@/components/lens/theme-cloud";
@@ -67,10 +81,17 @@ export default function YearPage({ params }: PageProps) {
                       style={{ background: THEME_COLORS[t.theme as Theme] ?? "#7dd3fc" }}
                     />
                     <Link
-                      href={`/graph?rootType=theme&rootId=versesignal:n:theme:${t.theme}`}
+                      href={`/theme/${t.theme}`}
                       className="text-sm font-medium text-ink-100 hover:text-signal-300"
                     >
                       {THEME_LABELS[t.theme as Theme] ?? t.theme}
+                    </Link>
+                    <Link
+                      href={`/graph?rootType=theme&rootId=versesignal:n:theme:${t.theme}`}
+                      className="text-[10px] text-ink-500 hover:text-signal-300"
+                      title="View in graph explorer"
+                    >
+                      graph
                     </Link>
                     <span className="text-xs text-ink-500">
                       {t.evidenceSongIds.length} song{t.evidenceSongIds.length === 1 ? "" : "s"}

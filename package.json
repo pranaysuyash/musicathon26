@@ -17,7 +17,11 @@
     "py:events": "uv run --no-sync python scripts/build-events.py",
     "py:graph": "uv run --no-sync python scripts/build-graph.py",
     "py:similar": "uv run --no-sync python scripts/build-similar-edges.py",
-    "check:env": "tsx scripts/check-env.ts"
+    "check:env": "tsx scripts/check-env.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:python": "uv run --no-sync python -m pytest tests/",
+    "test:all": "npm run test && npm run test:python"
   },
   "dependencies": {
     "better-sqlite3": "^11.3.0",
@@ -42,6 +46,7 @@
     "@types/node": "^20.14.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
+    "@vitest/ui": "^4.1.9",
     "autoprefixer": "^10.4.19",
     "dotenv": "^17.4.2",
     "drizzle-kit": "^0.24.0",
@@ -50,6 +55,7 @@
     "postcss": "^8.4.39",
     "tailwindcss": "^3.4.6",
     "tsx": "^4.16.0",
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "vitest": "^4.1.9"
   }
 }

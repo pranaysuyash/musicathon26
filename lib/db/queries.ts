@@ -9,6 +9,33 @@ import { getDb } from "./index";
 import { all, get } from "./sql";
 import type { Song, WorldEvent, GraphNode, GraphEdge, Evidence } from "../types";
 
+/** Human-readable labels for region codes. */
+export const REGION_LABELS: Record<string, string> = {
+  US: "United States",
+  GLOBAL: "Global",
+  IN: "India",
+  UK: "United Kingdom",
+  JP: "Japan",
+  KR: "South Korea",
+  DE: "Germany",
+  BR: "Brazil",
+  NG: "Nigeria",
+  MX: "Mexico",
+  UA: "Ukraine",
+  RU: "Russia",
+};
+
+/** Build a WHERE clause + params for filtering events by region.
+ *  When region is provided, matches events whose regions_json contains
+ *  the region code OR "GLOBAL". */
+function regionFilterClause(region: string | undefined): { clause: string; params: string[] } {
+  if (!region) return { clause: "", params: [] };
+  return {
+    clause: `AND EXISTS (SELECT 1 FROM json_each(e.regions_json) WHERE value IN (?, 'GLOBAL'))`,
+    params: [region],
+  };
+}
+
 interface SongRow {
   id: string;
   title: string;
@@ -150,6 +177,13 @@ export function getSongsByYear(year: number, region: string = "US"): Song[] {
   return rows.map(rowToSong);
 }
 
+export function getAllSongs(): Song[] {
+  const rows = all<SongRow>(
+    `SELECT * FROM songs ORDER BY year ASC, chart_rank ASC`
+  );
+  return rows.map(rowToSong);
+}
+
 export function getSongById(id: string): Song | null {
   const r = get<SongRow>(`SELECT * FROM songs WHERE id = ?`, id);
   return r ? rowToSong(r) : null;
@@ -246,6 +280,89 @@ export function getYearThemes(year: number, region: string = "US", topN: number 
   }));
 }
 
+/** Get songs scored for a theme, sorted by score descending. */
+export function getSongsByTheme(theme: string, limit: number = 50): Array<{
+  songId: string;
+  title: string;
+  artist: string;
+  year: number;
+  chartRank: number;
+  score: number;
+}> {
+  interface Row {
+    song_id: string;
+    title: string;
+    artist: string;
+    year: number;
+    chart_rank: number;
+    score: number;
+  }
+  const rows = all<Row>(
+    `SELECT ts.song_id, s.title, s.artist, s.year, s.chart_rank, ts.score
+     FROM theme_scores ts
+     JOIN songs s ON s.id = ts.song_id
+     WHERE ts.theme = ?
+     ORDER BY ts.score DESC
+     LIMIT ?`,
+    theme,
+    limit
+  );
+  return rows.map((r) => ({
+    songId: r.song_id,
+    title: r.title,
+    artist: r.artist,
+    year: r.year,
+    chartRank: r.chart_rank,
+    score: r.score,
+  }));
+}
+
+/** Get year-by-year distribution of a theme: song count + avg score. */
+export function getThemeYearDistribution(theme: string): Array<{
+  year: number;
+  songCount: number;
+  avgScore: number;
+}> {
+  interface Row { year: number; song_count: number; avg_score: number }
+  return all<Row>(
+    `SELECT s.year, COUNT(*) AS song_count, AVG(ts.score) AS avg_score
+     FROM theme_scores ts
+     JOIN songs s ON s.id = ts.song_id
+     WHERE ts.theme = ?
+     GROUP BY s.year
+     ORDER BY s.year`,
+    theme
+  ).map((r) => ({
+    year: r.year,
+    songCount: r.song_count,
+    avgScore: r.avg_score,
+  }));
+}
+
+/** Get events whose related themes or keywords overlap with a given theme. */
+export function getEventsByRelatedTheme(theme: string): Array<{
+  id: string;
+  name: string;
+  startDate: string;
+  category: string;
+}> {
+  interface Row { id: string; name: string; start_date: string; category: string }
+  return all<Row>(
+    `SELECT id, name, start_date, category
+     FROM events
+     WHERE (related_themes_json IS NOT NULL AND related_themes_json LIKE ?)
+        OR (keywords_json IS NOT NULL AND keywords_json LIKE ?)
+     ORDER BY start_date ASC`,
+    `%"${theme}"%`,
+    `%"${theme}"%`
+  ).map((r) => ({
+    id: r.id,
+    name: r.name,
+    startDate: r.start_date,
+    category: r.category,
+  }));
+}
+
 export function getYearMoods(year: number, region: string = "US", topN: number = 5): {
   mood: string;
   avgScore: number;
@@ -324,6 +441,98 @@ export function getSongsForEvent(
   });
 }
 
+export interface SimilarSong {
+  song_id: string;
+  title: string;
+  artist: string;
+  year: number;
+  weight: number;
+}
+
+export interface ArtistMeta {
+  canonical_name: string;
+  jambase_id: string;
+  jambase_genres: string[];
+  musicbrainz_id: string | null;
+  wikidata_id: string | null;
+}
+
+export function getArtistMeta(artistName: string): ArtistMeta | null {
+  // Look up artist metadata from the entities table.
+  // Try exact match first, then lowercased.
+  const exact = get<{
+    canonical_name: string;
+    jambase_id: string;
+    jambase_genres_json: string;
+    musicbrainz_id: string;
+    wikidata_id: string;
+  }>(
+    `SELECT canonical_name, jambase_id, jambase_genres_json, musicbrainz_id, wikidata_id
+       FROM entities
+      WHERE entity_type = 'artist'
+        AND LOWER(canonical_name) = LOWER(?)
+      LIMIT 1`,
+    artistName
+  );
+  if (!exact || !exact.jambase_id) return null;
+  return {
+    canonical_name: exact.canonical_name,
+    jambase_id: exact.jambase_id,
+    jambase_genres: exact.jambase_genres_json ? JSON.parse(exact.jambase_genres_json) : [],
+    musicbrainz_id: exact.musicbrainz_id || null,
+    wikidata_id: exact.wikidata_id || null,
+  };
+}
+
+export function getSimilarSongs(songId: string, limit: number = 8): SimilarSong[] {
+  // Get top similar_to neighbors. We query both src and dst to
+  // catch the undirected relationship. The schema stores both
+  // directions in build-similar-edges.py, so a single query
+  // on src returns one direction; we OR with dst to get both.
+  const direct = all<SimilarSong>(
+    `
+    SELECT
+        other.id AS song_id,
+        other.title,
+        other.artist,
+        other.year,
+        ge.weight
+      FROM graph_edges ge
+      JOIN songs other ON other.id = SUBSTR(ge.dst_id, 20)
+     WHERE ge.src_id = ?
+       AND ge.edge_type = 'similar_to'
+     ORDER BY ge.weight DESC
+     LIMIT ?
+    `,
+    `versesignal:n:song:${songId}`,
+    limit
+  );
+  // If we got fewer than `limit` results, the song is the SOURCE
+  // for some pairs and we should also look at the BACK direction.
+  if (direct.length >= limit) return direct;
+  const back = all<SimilarSong>(
+    `
+    SELECT
+        other.id AS song_id,
+        other.title,
+        other.artist,
+        other.year,
+        ge.weight
+      FROM graph_edges ge
+      JOIN songs other ON other.id = SUBSTR(ge.src_id, 20)
+     WHERE ge.dst_id = ?
+       AND ge.edge_type = 'similar_to'
+     ORDER BY ge.weight DESC
+     LIMIT ?
+    `,
+    `versesignal:n:song:${songId}`,
+    limit
+  );
+  // Merge, dedup, sort by weight desc
+  const seen = new Set(direct.map((d: SimilarSong) => d.song_id));
+  return [...direct, ...back.filter((b: SimilarSong) => !seen.has(b.song_id))].slice(0, limit);
+}
+
 export function getSongsMentioningEntity(entityId: string, limit: number = 50): {
   songId: string;
   title: string;
@@ -362,4 +571,877 @@ export function getSongsMentioningEntity(entityId: string, limit: number = 50): 
     confidence: r.confidence,
     source: r.source,
   }));
+}
+// === Year Signal Profiles (P1.1, lyrics-first signal engine) ===
+
+export interface YearSignalProfile {
+  id: string;
+  year: number;
+  region: string;
+  signalType: "theme" | "mood" | "entity" | "phrase" | "place" | "brand";
+  signal: string;
+  score: number;
+  songCount: number;
+  deltaVsPrevYear: number | null;
+  deltaVsBaseline: number | null;
+  evidenceSongIds: string[];
+  sourceApi: "theme_scores" | "mood_scores" | "entity_mentions" | "hybrid";
+  computedAt: string;
+}
+
+/** Get the top N signals for a year + region, grouped by type. */
+export function getYearSignals(
+  year: number,
+  region: string = "US",
+  limitPerType: number = 20
+): YearSignalProfile[] {
+  interface Row {
+    id: string;
+    year: number;
+    region: string;
+    signal_type: string;
+    signal: string;
+    score: number;
+    song_count: number;
+    delta_vs_prev_year: number | null;
+    delta_vs_baseline: number | null;
+    evidence_song_ids_json: string;
+    source_api: string;
+    computed_at: string;
+  }
+  const rows = all<Row>(
+    `
+    SELECT * FROM year_signal_profiles
+    WHERE year = ? AND region = ?
+    ORDER BY score DESC
+    LIMIT ?
+    `,
+    year,
+    region,
+    limitPerType * 3  // fetch enough to cover each type
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    year: r.year,
+    region: r.region,
+    signalType: r.signal_type as YearSignalProfile["signalType"],
+    signal: r.signal,
+    score: r.score,
+    songCount: r.song_count,
+    deltaVsPrevYear: r.delta_vs_prev_year,
+    deltaVsBaseline: r.delta_vs_baseline,
+    evidenceSongIds: r.evidence_song_ids_json ? JSON.parse(r.evidence_song_ids_json) : [],
+    sourceApi: r.source_api as YearSignalProfile["sourceApi"],
+    computedAt: r.computed_at,
+  }));
+}
+// === Cultural Lens (P1.5) ===
+
+/** Get the top N signals for a year across all signal types. */
+export function getYearSignalTop(
+  year: number,
+  region: string = "US",
+  limit: number = 5
+): ReturnType<typeof getYearSignals> {
+  // getYearSignals returns the top 3*limit signals sorted by score
+  return getYearSignals(year, region, limit * 3).slice(0, limit);
+}
+
+/** Get all events whose date range overlaps with a given year.
+ *  Optionally filter by region. */
+export function getEventsForYear(year: number, region?: string): Array<{
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string | null;
+  category: string;
+  regions: string[];
+}> {
+  interface Row {
+    id: string;
+    name: string;
+    start_date: string;
+    end_date: string | null;
+    category: string;
+    regions_json: string;
+  }
+  const rf = regionFilterClause(region);
+  const rows = all<Row>(
+    `
+    SELECT id, name, start_date, end_date, category, regions_json
+    FROM events e
+    WHERE substr(start_date, 1, 4) <= ?
+      AND (end_date IS NULL OR substr(end_date, 1, 4) >= ?)
+      ${rf.clause}
+    ORDER BY start_date ASC
+    `,
+    String(year),
+    String(year),
+    ...rf.params,
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    startDate: r.start_date,
+    endDate: r.end_date,
+    category: r.category,
+    regions: JSON.parse(r.regions_json),
+  }));
+}
+// === Signal Clusters (P1.2) ===
+
+export interface SignalCluster {
+  id: string;
+  year: number;
+  region: string;
+  label: string;
+  signalCount: number;
+  songCount: number;
+  signals: { type: string; signal: string; weight: number }[];
+  songIds: string[];
+  confidence: number;
+  computedAt: string;
+}
+
+/** Get the top N signal clusters for a year + region. */
+export function getSignalClusters(
+  year: number,
+  region: string = "US",
+  limit: number = 5
+): SignalCluster[] {
+  interface Row {
+    id: string;
+    year: number;
+    region: string;
+    label: string;
+    signal_count: number;
+    song_count: number;
+    signals_json: string;
+    song_ids_json: string | null;
+    confidence: number;
+    computed_at: string;
+  }
+  const rows = all<Row>(
+    `
+    SELECT * FROM signal_clusters
+    WHERE year = ? AND region = ?
+    ORDER BY song_count DESC
+    LIMIT ?
+    `,
+    year,
+    region,
+    limit
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    year: r.year,
+    region: r.region,
+    label: r.label,
+    signalCount: r.signal_count,
+    songCount: r.song_count,
+    signals: r.signals_json ? JSON.parse(r.signals_json) : [],
+    songIds: r.song_ids_json ? JSON.parse(r.song_ids_json) : [],
+    confidence: r.confidence,
+    computedAt: r.computed_at,
+  }));
+}
+
+// === Candidate Contexts (P1.3) ===
+
+export interface CandidateContext {
+  id: string;
+  clusterId: string;
+  year: number;
+  region: string;
+  explanation: string;
+  explanationShort: string | null;
+  dominantPosture: string | null;
+  postureDistribution: Record<string, number> | null;
+  triggerEventIds: string[] | null;
+  crossYearType: string | null;
+  crossYearEvidence: string | null;
+  comparativeSignals: Array<{
+    type: string;
+    signal: string;
+    clusterWeight: number;
+    yearBaseline: number | null;
+    lift: number | null;
+  }> | null;
+  evidence: string;
+  confidence: number;
+  computedAt: string;
+}
+
+/** Get candidate contexts for a year + region (top N). */
+export function getCandidateContexts(
+  year: number,
+  region: string = "US",
+  limit: number = 5
+): CandidateContext[] {
+  interface Row {
+    id: string;
+    cluster_id: string;
+    year: number;
+    region: string;
+    explanation: string;
+    explanation_short: string | null;
+    dominant_posture: string | null;
+    posture_distribution_json: string | null;
+    trigger_event_ids_json: string | null;
+    cross_year_type: string | null;
+    cross_year_evidence: string | null;
+    comparative_signals_json: string | null;
+    evidence: string;
+    confidence: number;
+    computed_at: string;
+  }
+  const rows = all<Row>(
+    `
+    SELECT * FROM candidate_contexts
+    WHERE year = ? AND region = ?
+    ORDER BY confidence DESC, id
+    LIMIT ?
+    `,
+    year,
+    region,
+    limit
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    clusterId: r.cluster_id,
+    year: r.year,
+    region: r.region,
+    explanation: r.explanation,
+    explanationShort: r.explanation_short,
+    dominantPosture: r.dominant_posture,
+    postureDistribution: r.posture_distribution_json ? JSON.parse(r.posture_distribution_json) : null,
+    triggerEventIds: r.trigger_event_ids_json ? JSON.parse(r.trigger_event_ids_json) : null,
+    crossYearType: r.cross_year_type,
+    crossYearEvidence: r.cross_year_evidence,
+    comparativeSignals: r.comparative_signals_json ? JSON.parse(r.comparative_signals_json) : null,
+    evidence: r.evidence,
+    confidence: r.confidence,
+    computedAt: r.computed_at,
+  }));
+}
+
+// === Contradiction Finder (songs that stood against the current) ===
+
+export interface Contradiction {
+  songId: string;
+  songTitle: string;
+  artist: string;
+  eventId: string;
+  eventName: string;
+  eventCategory: string;
+  posture: string;
+  score: number;
+  /** Why this is a contradiction (human-readable) */
+  description: string;
+}
+
+const CONTRADICTION_MAP: Record<string, string[]> = {
+  escape: ["reflection", "shadow", "contradiction"],
+  reflection: ["escape", "coincidence"],
+  processing: ["escape", "coincidence"],
+  coincidence: ["reflection", "escape", "shadow", "contradiction"],
+};
+
+/** Find songs whose posture goes against the year's dominant cultural current. */
+export function getContradictions(year: number, limit: number = 10, region?: string): Contradiction[] {
+  const rf = regionFilterClause(region);
+  // Step 1: determine dominant posture for the year
+  interface PostureRow {
+    posture: string;
+    cnt: number;
+  }
+  const postures = all<PostureRow>(
+    `
+    SELECT cp.posture, COUNT(*) as cnt
+    FROM cultural_posture cp
+    JOIN events e ON e.id = cp.event_id
+    WHERE substr(e.start_date, 1, 4) <= ?
+      AND (e.end_date IS NULL OR substr(e.end_date, 1, 4) >= ?)
+      ${rf.clause}
+    GROUP BY cp.posture
+    ORDER BY cnt DESC
+    `,
+    String(year), String(year),
+    ...rf.params,
+  );
+
+  if (postures.length === 0) return [];
+
+  const dominant = postures[0].posture;
+  const counterPostures = CONTRADICTION_MAP[dominant];
+  if (!counterPostures || counterPostures.length === 0) return [];
+
+  // Step 2: find songs with counter postures
+  interface Row {
+    song_id: string;
+    song_title: string;
+    artist: string;
+    event_id: string;
+    event_name: string;
+    event_category: string;
+    posture: string;
+    score: number;
+  }
+
+  const placeholders = counterPostures.map(() => "?").join(",");
+  const rows = all<Row>(
+    `
+    SELECT cp.song_id, s.title AS song_title, s.artist,
+           cp.event_id, e.name AS event_name, e.category AS event_category,
+           cp.posture, cp.score
+    FROM cultural_posture cp
+    JOIN songs s ON cp.song_id = s.id
+    JOIN events e ON e.id = cp.event_id
+    WHERE substr(e.start_date, 1, 4) <= ?
+      AND (e.end_date IS NULL OR substr(e.end_date, 1, 4) >= ?)
+      ${rf.clause}
+      AND cp.posture IN (${placeholders})
+    ORDER BY cp.score DESC
+    LIMIT ?
+    `,
+    String(year), String(year),
+    ...rf.params,
+    ...counterPostures,
+    limit,
+  );
+
+  const descriptionTemplates: Record<string, string> = {
+    escape: "While most songs reflected the cultural moment, this one offered an escape — a deliberate turn away from {event}.",
+    reflection: "While most songs escaped the news cycle, this one engaged with {event} — refusing to look away from the cultural moment.",
+    processing: "Unlike the chart consensus, this song didn't look away from {event}. It worked through the feelings instead of escaping them.",
+    coincidence: "While other songs flowed with the cultural current of {event}, this one ran on its own independent momentum.",
+    contradiction: "This song actively contradicts the spirit of {event} — instead of echoing the moment, it pushed against it.",
+    shadow: "Rather than reflecting or escaping {event}, this song cast a shadow — a darker, more complex response to the cultural moment.",
+  };
+
+  return rows.map((r) => {
+    const template = descriptionTemplates[r.posture] ?? `This song took a different path during {event}.`;
+    return {
+      songId: r.song_id,
+      songTitle: r.song_title,
+      artist: r.artist,
+      eventId: r.event_id,
+      eventName: r.event_name,
+      eventCategory: r.event_category,
+      posture: r.posture,
+      score: r.score,
+      description: template.replace("{event}", r.event_name),
+    };
+  });
+}
+
+// === Cultural Posture (P1.4) ===
+
+export interface PostureSummary {
+  posture: string;
+  songCount: number;
+  exampleSongIds: string[];
+}
+
+/** Summarize cultural posture counts for a year (across all events). */
+export function getPostureSummary(year: number, region?: string): PostureSummary[] {
+  const rf = regionFilterClause(region);
+  interface Row {
+    posture: string;
+    song_count: number;
+    song_ids: string;
+  }
+  // Aggregate across all events that overlap with the year.
+  // Use cultural_posture joined with events (filter by year overlap).
+  const rows = all<Row>(
+    `
+    SELECT cp.posture AS posture,
+           COUNT(DISTINCT cp.song_id) AS song_count,
+           GROUP_CONCAT(DISTINCT cp.song_id) AS song_ids
+    FROM cultural_posture cp
+    JOIN events e ON e.id = cp.event_id
+    WHERE substr(e.start_date, 1, 4) <= ?
+      AND (e.end_date IS NULL OR substr(e.end_date, 1, 4) >= ?)
+      ${rf.clause}
+    GROUP BY cp.posture
+    ORDER BY song_count DESC
+    `,
+    String(year),
+    String(year),
+    ...rf.params,
+  );
+  return rows.map((r) => ({
+    posture: r.posture,
+    songCount: r.song_count,
+    exampleSongIds: r.song_ids ? r.song_ids.split(",").slice(0, 5) : [],
+  }));
+}
+// === Context Signal Correlations (P2.2) ===
+
+export interface ContextSignalCorrelation {
+  id: string;
+  eventId: string;
+  year: number;
+  signalType: string;
+  signal: string;
+  baselineMean: number;
+  eventPeriodScore: number;
+  delta: number;
+  confidence: number;
+  evidenceSongIds: string[];
+  computedAt: string;
+}
+
+/** Get the top correlations for an event, sorted by |delta|. */
+export function getEventCorrelations(
+  eventId: string,
+  year?: number,
+  limit: number = 20
+): ContextSignalCorrelation[] {
+  interface Row {
+    id: string;
+    event_id: string;
+    year: number;
+    signal_type: string;
+    signal: string;
+    baseline_mean: number;
+    event_period_score: number;
+    delta: number;
+    confidence: number;
+    evidence_song_ids_json: string;
+    computed_at: string;
+  }
+  const whereYear = year !== undefined ? "AND year = ?" : "";
+  const params: Array<string | number> = year !== undefined
+    ? [eventId, year, limit]
+    : [eventId, limit];
+  const rows = all<Row>(
+    `
+    SELECT * FROM context_signal_correlations
+    WHERE event_id = ? ${whereYear}
+    ORDER BY ABS(delta) DESC
+    LIMIT ?
+    `,
+    ...params
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    eventId: r.event_id,
+    year: r.year,
+    signalType: r.signal_type,
+    signal: r.signal,
+    baselineMean: r.baseline_mean,
+    eventPeriodScore: r.event_period_score,
+    delta: r.delta,
+    confidence: r.confidence,
+    evidenceSongIds: r.evidence_song_ids_json ? JSON.parse(r.evidence_song_ids_json) : [],
+    computedAt: r.computed_at,
+  }));
+}
+// === Cultural Signal Brief (P2.1) ===
+
+export interface BriefSection {
+  heading: string;
+  body: string;
+  evidenceSongIds: string[];  // example songs cited
+  evidenceSignalIds: string[]; // example signals cited
+}
+
+export interface CulturalSignalBrief {
+  year: number;
+  region: string;
+  sections: BriefSection[];
+  generatedAt: string;
+  methodNote: string; // "auto-generated; not human-edited"
+}
+
+/** Get the cultural signal brief for a year + region.
+ *
+ * This is a template-first narrative generator. It produces
+ * 4-6 evidence-backed sections explaining what the charts
+ * were saying, what shifted during events, and how songs
+ * related to the events. Optionally an LLM could be
+ * plugged in here later; for v1 the data alone makes the
+ * case compelling.
+ *
+ * Sections:
+ *   1. The emotional weather (top moods with deltas)
+ *   2. What the lyrics kept returning to (top themes)
+ *   3. The names that kept appearing (top entities)
+ *   4. What the world was going through (events)
+ *   5. How songs related to those events (posture breakdown)
+ *   6. The single biggest shift (peak correlation)
+ */
+export async function getCulturalSignalBrief(
+  year: number,
+  region: string = "US"
+): Promise<CulturalSignalBrief> {
+  // Pull the data
+  const allSignals = getYearSignals(year, region, 200);
+
+  // Categorize by signal_type
+  const moods = allSignals.filter((s) => s.signalType === "mood");
+  const themes = allSignals.filter((s) => s.signalType === "theme");
+  const entities = allSignals.filter((s) => s.signalType === "entity");
+
+  // Section 1: emotional weather
+  const topMoods = moods
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+  const moodDeltas = topMoods
+    .map((m) => {
+      const d = m.deltaVsBaseline;
+      const dStr = d == null ? "" : d >= 0 ? `+${(d * 100).toFixed(0)}%` : `${(d * 100).toFixed(0)}%`;
+      return `${m.signal} ${dStr} (${m.songCount} songs)`;
+    })
+    .join(", ");
+  const section1: BriefSection = {
+    heading: "The chart's emotional weather",
+    body: `Chart music in ${year} was led by ${topMoods[0]?.signal ?? "unknown"} (${topMoods[0]?.songCount ?? 0} chart songs), with ${topMoods[1]?.signal ?? "—"} and ${topMoods[2]?.signal ?? "—"} close behind. Compared to the prior 3-year baseline, the mood profile shifted: ${moodDeltas || "no deltas available"}.`,
+    evidenceSongIds: topMoods.flatMap((m) => m.evidenceSongIds).slice(0, 5),
+    evidenceSignalIds: topMoods.map((m) => `versesignal:ysp:${year}:US:mood:${m.signal.replace(/\s+/g, "-")}`),
+  };
+
+  // Section 2: themes
+  const topThemes = themes
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+  const section2: BriefSection = {
+    heading: "What the lyrics kept returning to",
+    body:
+      topThemes.length > 0
+        ? `The themes most present in the year's chart were: ${topThemes.map((t) => `${t.signal.replace(/_/g, " ")} (${t.songCount} songs)`).join(", ")}.`
+        : `Chart theme data is sparse for ${year}.`,
+    evidenceSongIds: topThemes.flatMap((t) => t.evidenceSongIds).slice(0, 5),
+    evidenceSignalIds: topThemes.map((t) => `versesignal:ysp:${year}:US:theme:${t.signal}`),
+  };
+
+  // Section 3: entities
+  const topEntities = entities
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+  const section3: BriefSection = {
+    heading: "The names that kept appearing",
+    body:
+      topEntities.length > 0
+        ? `Mentioned across the chart: ${topEntities.map((e) => `${e.signal} (${e.songCount} songs)`).join(", ")}.`
+        : "",
+    evidenceSongIds: topEntities.flatMap((e) => e.evidenceSongIds).slice(0, 5),
+    evidenceSignalIds: topEntities.map((e) => `versesignal:ysp:${year}:US:entity:${e.signal.replace(/\s+/g, "-")}`),
+  };
+
+  // Section 4: events
+  const events = getEventsForYear(year);
+  const section4: BriefSection = {
+    heading: "What the world was going through",
+    body:
+      events.length > 0
+        ? `${events.length} curated world event${events.length === 1 ? "" : "s"} overlap${events.length === 1 ? "s" : ""} ${year}: ${events.slice(0, 3).map((e) => e.name).join("; ")}${events.length > 3 ? `; and ${events.length - 3} more` : ""}.`
+        : `No curated world events overlap ${year} in the current corpus.`,
+    evidenceSongIds: [],
+    evidenceSignalIds: [],
+  };
+
+  // Section 5: posture breakdown
+  // Inline posture counts via a quick query (server-side only)
+  const postureRows: Array<{ posture: string; n: number }> = [];
+  try {
+    const { getDb } = await import("@/lib/db");
+    const db = getDb();
+    const rs = db
+      .prepare(
+        `SELECT cp.posture AS posture, COUNT(DISTINCT cp.song_id) AS n
+         FROM cultural_posture cp
+         JOIN events e ON e.id = cp.event_id
+         WHERE substr(e.start_date, 1, 4) <= ?
+           AND (e.end_date IS NULL OR substr(e.end_date, 1, 4) >= ?)
+         GROUP BY cp.posture ORDER BY n DESC`
+      )
+      .all(String(year), String(year)) as Array<{ posture: string; n: number }>;
+    for (const r of rs) postureRows.push(r);
+  } catch {
+    // Skip posture section if DB unavailable
+  }
+  const total = postureRows.reduce((s, r) => s + r.n, 0);
+  const section5: BriefSection = {
+    heading: "How chart music related to those events",
+    body:
+      postureRows.length > 0 && total > 0
+        ? `Of ${total} (song, event) pair classifications in ${year}: ${postureRows
+            .map((p) => `${p.posture} ${((p.n / total) * 100).toFixed(0)}%`)
+            .join(", ")}. The dominant pattern is the headline of the year.`
+        : "Posture data not available for this year.",
+    evidenceSongIds: [],
+    evidenceSignalIds: [],
+  };
+
+  // Section 6: peak shift
+  // Query the top correlation across all events in the year
+  const topCorrPerEvent: Array<{
+    eventName: string;
+    signalType: string;
+    signal: string;
+    delta: number;
+  }> = [];
+  for (const ev of events) {
+    const cs = getEventCorrelations(ev.id, year, 1);
+    if (cs.length > 0) {
+      topCorrPerEvent.push({
+        eventName: ev.name,
+        signalType: cs[0].signalType,
+        signal: cs[0].signal,
+        delta: cs[0].delta,
+      });
+    }
+  }
+  topCorrPerEvent.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+  const peak = topCorrPerEvent[0];
+  const section6: BriefSection | null = peak
+    ? {
+        heading: "The single biggest shift",
+        body: `During ${peak.eventName}, the ${peak.signalType} "${peak.signal}" shifted ${peak.delta >= 0 ? "up" : "down"} ${Math.abs(peak.delta * 100).toFixed(0)}% vs the prior 3-year baseline. This is the largest single signal movement in the year.`,
+        evidenceSongIds: [],
+        evidenceSignalIds: [`versesignal:csc:${peak.eventName}:${year}:${peak.signalType}:${peak.signal.replace(/\s+/g, "-")}`],
+      }
+    : null;
+
+  const sections: BriefSection[] = [section1, section2, section3, section4, section5];
+  if (section6) sections.push(section6);
+
+  return {
+    year,
+    region,
+    sections,
+    generatedAt: new Date().toISOString(),
+    methodNote:
+      "Auto-generated from year_signal_profiles + context_signal_correlations + cultural_posture. Not human-edited.",
+  };
+}
+
+// === Event Signal Decay (P2.3) ===
+
+export interface EventSignalDecayYear {
+  year: number;
+  yearsSinceEvent: number;
+  postureCounts: Record<string, number>;
+  totalSongs: number;
+  dominantPosture: string;
+}
+
+/** For a given event, show how signals decayed over subsequent years. */
+export function getEventSignalDecay(eventId: string): EventSignalDecayYear[] {
+  interface Row {
+    song_year: number;
+    posture: string;
+    cnt: number;
+  }
+  const rows = all<Row>(
+    `
+    SELECT s.year AS song_year, cp.posture, COUNT(*) as cnt
+    FROM cultural_posture cp
+    JOIN songs s ON cp.song_id = s.id
+    WHERE cp.event_id = ?
+    GROUP BY s.year, cp.posture
+    ORDER BY s.year, cp.posture
+    `,
+    eventId,
+  );
+
+  // Group by year
+  const byYear: Record<number, { postureCounts: Record<string, number>; total: number }> = {};
+  for (const r of rows) {
+    if (!byYear[r.song_year]) {
+      byYear[r.song_year] = { postureCounts: {}, total: 0 };
+    }
+    byYear[r.song_year].postureCounts[r.posture] = (byYear[r.song_year].postureCounts[r.posture] ?? 0) + r.cnt;
+    byYear[r.song_year].total += r.cnt;
+  }
+
+  const event = getEventById(eventId);
+  const eventStartYear = event ? parseInt(event.startDate, 10) : 0;
+
+  return Object.entries(byYear)
+    .map(([yearStr, data]) => {
+      const year = parseInt(yearStr, 10);
+      const dominant = Object.entries(data.postureCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "";
+      return {
+        year,
+        yearsSinceEvent: year - eventStartYear,
+        postureCounts: data.postureCounts,
+        totalSongs: data.total,
+        dominantPosture: dominant,
+      };
+    })
+    .sort((a, b) => a.year - b.year);
+}
+
+/** Get all events that still have signal echoes in a given year (posture counts from songs of that year). */
+export function getEchoingEvents(year: number, region?: string): { eventId: string; eventName: string; eventStartYear: number; songCount: number; dominantPosture: string }[] {
+  const rf = regionFilterClause(region);
+  interface Row {
+    event_id: string;
+    event_start: string;
+    event_name: string;
+    cnt: number;
+    dominant: string;
+  }
+  const rows = all<Row>(
+    `
+    SELECT cp.event_id, e.start_date AS event_start, e.name AS event_name,
+           COUNT(DISTINCT cp.song_id) AS cnt,
+           (SELECT cp2.posture FROM cultural_posture cp2
+            JOIN songs s2 ON cp2.song_id = s2.id
+            WHERE cp2.event_id = cp.event_id AND s2.year = ?
+            GROUP BY cp2.posture ORDER BY COUNT(*) DESC LIMIT 1) AS dominant
+    FROM cultural_posture cp
+    JOIN songs s ON cp.song_id = s.id
+    JOIN events e ON cp.event_id = e.id
+    WHERE s.year = ?
+      ${rf.clause}
+    GROUP BY cp.event_id
+    ORDER BY cnt DESC
+    `,
+    year, year,
+    ...rf.params,
+  );
+  return rows.map((r) => ({
+    eventId: r.event_id,
+    eventName: r.event_name,
+    eventStartYear: parseInt(r.event_start, 10),
+    songCount: r.cnt,
+    dominantPosture: r.dominant ?? "unknown",
+  }));
+}
+
+export function getAllYears(region: string = "US"): { year: number; songCount: number }[] {
+  const rows = all<{ year: number; cnt: number }>(
+    region === "GLOBAL"
+      ? `SELECT s.year, COUNT(*) AS cnt FROM songs s WHERE s.year IS NOT NULL GROUP BY s.year ORDER BY s.year`
+      : `SELECT s.year, COUNT(*) AS cnt FROM songs s WHERE s.year IS NOT NULL AND s.region = ? GROUP BY s.year ORDER BY s.year`,
+    ...(region === "GLOBAL" ? [] : [region]),
+  );
+  return rows.map((r) => ({ year: r.year, songCount: r.cnt }));
+}
+
+export interface DataHealth {
+  totalSongs: number;
+  songsWithThemes: number;
+  songsWithMoods: number;
+  songsWithEntities: number;
+  years: number;
+  events: number;
+  entities: number;
+  entityMentions: number;
+  graphNodes: number;
+  graphEdges: number;
+  evidenceRows: number;
+}
+
+export function getDataHealth(): DataHealth {
+  const totalSongs = get<{ cnt: number }>("SELECT COUNT(*) AS cnt FROM songs")?.cnt ?? 0;
+  const songsWithThemes = get<{ cnt: number }>("SELECT COUNT(DISTINCT song_id) AS cnt FROM theme_scores")?.cnt ?? 0;
+  const songsWithMoods = get<{ cnt: number }>("SELECT COUNT(DISTINCT song_id) AS cnt FROM mood_scores")?.cnt ?? 0;
+  const songsWithEntities = get<{ cnt: number }>("SELECT COUNT(DISTINCT song_id) AS cnt FROM entity_mentions")?.cnt ?? 0;
+  const years = get<{ cnt: number }>("SELECT COUNT(DISTINCT year) AS cnt FROM songs WHERE year IS NOT NULL")?.cnt ?? 0;
+  const events = get<{ cnt: number }>("SELECT COUNT(*) AS cnt FROM events")?.cnt ?? 0;
+  const entities = get<{ cnt: number }>("SELECT COUNT(*) AS cnt FROM entities")?.cnt ?? 0;
+  const entityMentions = get<{ cnt: number }>("SELECT COUNT(*) AS cnt FROM entity_mentions")?.cnt ?? 0;
+  const graphNodes = get<{ cnt: number }>("SELECT COUNT(*) AS cnt FROM graph_nodes")?.cnt ?? 0;
+  const graphEdges = get<{ cnt: number }>("SELECT COUNT(*) AS cnt FROM graph_edges")?.cnt ?? 0;
+  const evidenceRows = get<{ cnt: number }>("SELECT COUNT(*) AS cnt FROM evidence")?.cnt ?? 0;
+  return { totalSongs, songsWithThemes, songsWithMoods, songsWithEntities, years, events, entities, entityMentions, graphNodes, graphEdges, evidenceRows };
+}
+
+export interface AnalogousYear {
+  year: number;
+  similarity: number;
+  overlapSignals: { signal: string; signalType: string; score: number }[];
+}
+
+export function getAnalogousYears(year: number, region: string = "US", limit: number = 3): AnalogousYear[] {
+  interface Row {
+    year: number;
+    signal_type: string;
+    signal: string;
+    score: number;
+  }
+  const rows = all<Row>(
+    `SELECT year, signal_type, signal, score FROM year_signal_profiles WHERE region = ? ORDER BY year, score DESC`,
+    region,
+  );
+
+  const byYear = new Map<number, Map<string, number>>();
+  for (const r of rows) {
+    if (!byYear.has(r.year)) byYear.set(r.year, new Map());
+    byYear.get(r.year)!.set(`${r.signal_type}:${r.signal}`, r.score);
+  }
+
+  const target = byYear.get(year);
+  if (!target || byYear.size < 2) return [];
+
+  const results: { year: number; sim: number; overlap: { signal: string; signalType: string; score: number }[] }[] = [];
+
+  for (const [otherYear, other] of byYear) {
+    if (otherYear === year) continue;
+
+    const allKeys = new Set([...target.keys(), ...other.keys()]);
+    let dot = 0, magA = 0, magB = 0;
+    const overlap: { key: string; scoreA: number; scoreB: number }[] = [];
+    for (const k of allKeys) {
+      const a = target.get(k) ?? 0;
+      const b = other.get(k) ?? 0;
+      dot += a * b;
+      magA += a * a;
+      magB += b * b;
+      if (a > 0 && b > 0) {
+        overlap.push({ key: k, scoreA: a, scoreB: b });
+      }
+    }
+    const sim = Math.sqrt(magA) * Math.sqrt(magB) > 0
+      ? dot / (Math.sqrt(magA) * Math.sqrt(magB))
+      : 0;
+
+    overlap.sort((a, b) => Math.max(b.scoreA, b.scoreB) - Math.max(a.scoreA, a.scoreB));
+    results.push({
+      year: otherYear,
+      sim,
+      overlap: overlap.slice(0, 5).map((o) => {
+        const colon = o.key.indexOf(":");
+        return { signal: o.key.slice(colon + 1), signalType: o.key.slice(0, colon), score: Math.max(o.scoreA, o.scoreB) };
+      }),
+    });
+  }
+
+  return results.sort((a, b) => b.sim - a.sim).slice(0, limit).map((r) => ({
+    year: r.year,
+    similarity: r.sim,
+    overlapSignals: r.overlap,
+  }));
+}
+
+export function getMoodYearDistribution(mood: string, region: string = "US"): { year: number; score: number; songCount: number }[] {
+  const rows = all<{ year: number; score: number; song_count: number }>(
+    `SELECT year, score, song_count FROM year_signal_profiles WHERE region = ? AND signal_type = 'mood' AND signal = ? ORDER BY year`,
+    region, mood,
+  );
+  return rows.map((r) => ({ year: r.year, score: r.score, songCount: r.song_count }));
+}
+
+export function getSignalYearDistributions(signalType: string, region: string = "US"): Map<string, { year: number; score: number; songCount: number }[]> {
+  interface Row {
+    signal: string;
+    year: number;
+    score: number;
+    song_count: number;
+  }
+  const rows = all<Row>(
+    `SELECT signal, year, score, song_count FROM year_signal_profiles WHERE region = ? AND signal_type = ? ORDER BY signal, year`,
+    region, signalType,
+  );
+  const map = new Map<string, { year: number; score: number; songCount: number }[]>();
+  for (const r of rows) {
+    if (!map.has(r.signal)) map.set(r.signal, []);
+    map.get(r.signal)!.push({ year: r.year, score: r.score, songCount: r.song_count });
+  }
+  return map;
 }

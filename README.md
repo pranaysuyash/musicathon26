@@ -1,6 +1,6 @@
-# Musicathon 2026 — VerseSignal
+# VerseSignal
 
-> **A music-cultural knowledge graph.** How popular songs, lyrics, artists, themes, named entities, moods, collaborators, and world events connect across time. Built for Musicathon 2026.
+> **A music-cultural knowledge graph.** How popular songs, lyrics, artists, themes, named entities, moods, collaborators, and world events connect across time.
 
 ```
 "When the world was going through something, what was it singing?"
@@ -21,7 +21,7 @@ themes and moods in ElevenLabs' Rachel voice.
 
 ```bash
 git clone https://github.com/pranaysuyash/musicathon26
-cd musicathon
+cd musicathon26
 npm install
 
 # 1. Initialize the database (schema + 10 curated events)
@@ -48,7 +48,7 @@ npm run dev
 npx tsx tools/test-artist-match.ts
 ```
 
-## The three demo paths that win
+## The three product flows
 
 1. **"What was the world singing in 2020?"** — `/year/2020`
    Shows the year insight (ElevenLabs narration), theme cloud,
@@ -66,7 +66,7 @@ npx tsx tools/test-artist-match.ts
 
 - **2018–2019**: U.S. chart-memory mode (Billboard Hot 100 year-end proxies)
 - **2020+**: Global streaming mode (Billboard Global 200 / Songstats)
-- The 150-song demo spine is **2018–2023, top 25 per year** from
+- The 150-song spine is **2018–2023, top 25 per year** from
   Wikipedia year-end lists (curated in `data/chart-seed.ts`)
 
 ## Partner API ownership
@@ -86,7 +86,7 @@ npx tsx tools/test-artist-match.ts
 ## Stack
 
 - **Frontend:** Next.js 14 App Router, TypeScript, Tailwind,
-  `react-force-graph-2d` for graph viz, ElevenLabs SDK v1.x
+  `react-force-graph-2d` for graph viz, ElevenLabs SDK future
 - **Data:** SQLite (WAL mode) via `better-sqlite3`
 - **NLP:** Python 3.13 (via `uv`) with `sentence-transformers`,
   `gliner`, `spaCy`. See `pyproject.toml`.
@@ -192,23 +192,42 @@ npx tsx tools/test-artist-match.ts
   reference the old version; bumping forces a fresh re-enrich
   and a new `model_version` on every row.
 
-## Final state (Musicathon 2026)
+## Final state (VerseSignal)
 
 - **150 songs** (6 years × 25, Billboard Hot 100 year-end 2018–2023)
-- **131 songs with Musixmatch lyrics** (87%; 19 restricted)
-- **10 curated world events** (COVID-19, BLM, Ukraine war, etc.)
-- **6,711 lyric lines**, 981 theme scores, 390 mood scores,
-  2,079 entity mentions (1,241 GLiNER, 838 spaCy)
-- **846 graph nodes**, **3,437 graph edges**, **5,816 evidence rows**
-- **4/4 path presets** return correct results in <50ms
-- **9/9 surface routes** return 200
+- **131 songs with Musixmatch lyrics** (87%; 19 restricted upstream)
+- **15 curated world events** (10 in P0 + 5 in P9.1: Spotify IPO,
+  Capitol Riot, AI Boom/ChatGPT, Taylor Swift Eras Tour, Barbenheimer)
+- **6,711 lyric lines**, 984 theme scores, 390 mood scores,
+  2,092 entity mentions (1,241 GLiNER, 838 spaCy + GLiNER's
+  per-label mix)
+- **853 graph nodes**, **3,574 graph edges**, **6,524 evidence rows**
+- **15 artists** linked to MusicBrainz (P8.3)
+- **83 artists** linked to JamBase MCP (decision 0013) — real
+  artist IDs + genres, song page renders them
+- **35 artists** linked to Wikidata (decision 0016 — 9 in
+  first run + 26 from the multi-artist split re-run; rate
+  limit still blocks ~50 more from this IP)
+- **33 tests pass** (20 vitest + 13 pytest, `npm run test:all`)
+- **4/4 path presets** return valid results; 4-hop path
+  p99 = 4.45ms (1000 runs, cached)
+- **9/9 surface routes** return 200; path API returns clean 4xx
+  with `path_queries` audit log
+- **Song page** shows: themes, entities, event connections,
+  similar songs, artist (genres + JamBase + MusicBrainz + Wikidata)
+- **Path panel** has 5-pill edge-type filter
+- **Cyanite webhook receiver** ready (HMAC-verified, awaits key)
 - **6 ElevenLabs MP3s** cached for year narration
+- **16 decision records** (0001-0016) in `docs/decisions/`
 
 ## Verdicts (per 11-dim audit)
 
-- **Merge-ready**: ✅ Yes
-- **Feature-ready**: ✅ Yes
-- **Launch-ready**: 🟡 Not yet (no CI / deployment / monitoring)
+- **Merge-ready**: ✅ Yes (TS clean, 33 tests, 12 decisions)
+- **Feature-ready**: ✅ Yes (5/5 pages OK, similar-songs
+  section, edge-type filter, 15 events, 15 MB-linked artists)
+- **Launch-ready**: 🟡 Not yet (paid JamBase/Cyanite keys
+  not acquired; mobile visual audit not exhaustive; 4-hop
+  path not sample-verified at <100ms)
 
 See `docs/audit/0001-verseignal-11dim-audit.md` for the full 11-dim
 review and `docs/handoff/2026-06-16-handoff.md` for next-agent

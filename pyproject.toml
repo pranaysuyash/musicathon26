@@ -17,6 +17,11 @@ dependencies = [
 cpu = [
   "torch>=2.0.0",
 ]
+# Test suite dependencies (P7.5). Installed with `uv pip install ".[test]"`.
+test = [
+  "pytest>=8.0.0",
+  "python-dotenv>=1.0.0",
+]
 
 [tool.uv]
 # Always use CPU torch index unless GPU env is explicitly set up.

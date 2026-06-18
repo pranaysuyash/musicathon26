@@ -54,14 +54,16 @@
 
 @layer components {
   .pill {
-    @apply inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium;
+    @apply inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-400 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-950;
   }
   .pill-signal { @apply border-signal-700/40 bg-signal-900/30 text-signal-200; }
   .pill-echo { @apply border-echo-700/40 bg-echo-900/30 text-echo-200; }
   .pill-warn { @apply border-warn-500/40 bg-warn-500/10 text-warn-500; }
   .pill-mute { @apply border-ink-700 bg-ink-800/60 text-ink-300; }
   .card {
-    @apply rounded-xl border border-ink-800 bg-ink-900/60 backdrop-blur-sm;
+    @apply rounded-xl border border-ink-800 bg-ink-900/60 backdrop-blur-sm
+           focus-within:ring-1 focus-within:ring-signal-700/40;
   }
   .card-hover {
     @apply transition-all hover:border-ink-700 hover:bg-ink-900/80;
@@ -72,5 +74,16 @@
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

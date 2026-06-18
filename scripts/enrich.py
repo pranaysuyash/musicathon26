@@ -35,6 +35,15 @@ REPO = Path(__file__).resolve().parents[1]
 DB = REPO / "data" / "versesignal.db"
 THEME_LEXICON = REPO / "lib" / "nlp" / "theme-lexicon.json"
 
+# Allow `python scripts/enrich.py` to resolve `lib.nlp.*` siblings
+# (Python's normal sys.path doesn't include the repo root when a script
+# is invoked by absolute path under `uv run`). Per motto_v3 §0.8, the
+# data-layer module path must be robust to the runner.
+import sys as _sys
+if str(REPO) not in _sys.path:
+    _sys.path.insert(0, str(REPO))
+del _sys
+
 # Theme seed sentences used for embedding-based theme scoring.
 THEME_SEEDS: dict[str, list[str]] = {
     "love": [

@@ -1,6 +1,20 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { getSongById } from "@/lib/db/queries";
+import type { Metadata } from "next";
+import { getSongById, getSimilarSongs, getArtistMeta } from "@/lib/db/queries";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: { id: string };
+}): Promise<Metadata> {
+  const song = getSongById(decodeURIComponent(params.id));
+  if (!song) return { title: "Song not found" };
+  return {
+    title: `${song.title} — ${song.artist} (${song.year})`,
+    description: `Lyrics, themes, entities, and event connections for "${song.title}" by ${song.artist} (${song.year}, Billboard Hot 100 year-end #${song.chartRank}).`,
+  };
+}
 import { initDb } from "@/lib/db";
 import { all } from "@/lib/db/sql";
 import { Pill, SectionTitle, ConfidenceBar } from "@/components/ui/primitives";
@@ -51,9 +65,28 @@ export default function SongPage({ params }: PageProps) {
     song.id
   );
 
+  const similarSongs = getSimilarSongs(song.id, 6);
+
+  // Look up artist metadata. The songs.artist field may have
+  // "X, Y featuring Z"; for the metadata lookup we use the
+  // primary artist (everything before the first "featuring/&/").
+  const primaryArtist = song.artist
+    .split(/\s+(?:featuring|feat\.?|fe\.?|ft\.?|with)\s+/i)[0]
+    .split(/,\s*&\s*|\s+&\s+/)[0]
+    .trim();
+  const artistMeta = getArtistMeta(primaryArtist);
+
   const eventLinks = all<EventLinkRow>(
-    `SELECT ge.dst_id AS event_id, ev.name AS event_name, ge.weight, ge.explanation, ge.confidence
-       FROM graph_edges ge JOIN events ev ON ev.id = ge.dst_id
+    // P0 fix: the enrichment pipeline writes graph edge
+    // destinations as `versesignal:n:event:<event-id>`
+    // (canonical graph node form), while `events.id` is
+    // the bare `<event-id>` (e.g., `versesignal:ev:covid_19`).
+    // We strip the `versesignal:n:event:` prefix (20 chars)
+    // to match. The `/event/[id]` page already does this
+    // correctly; the song page was inconsistent.
+    `SELECT SUBSTR(ge.dst_id, 21) AS event_id, ev.name AS event_name,
+            ge.weight, ge.explanation, ge.confidence
+       FROM graph_edges ge JOIN events ev ON ev.id = SUBSTR(ge.dst_id, 21)
       WHERE ge.src_id = ? AND ge.edge_type = 'associated_with_event'
       ORDER BY ge.weight DESC`,
     song.id
@@ -110,7 +143,9 @@ export default function SongPage({ params }: PageProps) {
                     <li key={t.theme} className="flex items-center justify-between rounded border border-ink-800 bg-ink-900/40 p-3">
                       <div className="flex items-center gap-2">
                         <span className="h-2.5 w-2.5 rounded-full" style={{ background: THEME_COLORS[t.theme as Theme] ?? "#7dd3fc" }} />
-                        <span className="text-sm text-ink-100">{THEME_LABELS[t.theme as Theme] ?? t.theme}</span>
+                        <Link href={`/theme/${t.theme}`} className="text-sm text-ink-100 hover:text-signal-300">
+                          {THEME_LABELS[t.theme as Theme] ?? t.theme}
+                        </Link>
                         <Pill variant="mute">{t.source}</Pill>
                       </div>
                       <span className="text-xs tabular-nums text-ink-300">{(t.score * 100).toFixed(0)}%</span>
@@ -137,6 +172,91 @@ export default function SongPage({ params }: PageProps) {
                 ))
               )}
             </ul>
+          </section>
+
+          <section>
+            <SectionTitle>Similar songs ({similarSongs.length})</SectionTitle>
+            {similarSongs.length === 0 ? (
+              <p className="text-sm text-ink-500">No similar songs above the 0.65 cosine threshold in our corpus.</p>
+            ) : (
+              <ul className="card divide-y divide-ink-800/60">
+                {similarSongs.map((s) => (
+                  <li key={s.song_id} className="flex items-center gap-3 p-3 text-sm">
+                    <span className="w-10 text-right text-base font-semibold tabular-nums text-ink-500">
+                      {(s.weight * 100).toFixed(0)}%
+                    </span>
+                    <Link
+                      href={`/song/${encodeURIComponent(s.song_id)}`}
+                      className="flex-1 truncate text-ink-100 hover:text-signal-300"
+                    >
+                      {s.title} <span className="text-ink-500">— {s.artist}</span>
+                    </Link>
+                    <span className="text-xs text-ink-500">{s.year}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section>
+            <SectionTitle>Artist ({primaryArtist})</SectionTitle>
+            {artistMeta ? (
+              <div className="card p-4 text-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  {artistMeta.jambase_genres.map((g) => (
+                    <Pill key={g} variant="mute">{g}</Pill>
+                  ))}
+                </div>
+                <dl className="mt-3 grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-3">
+                  <dt className="text-ink-500">JamBase ID</dt>
+                  <dd className="sm:col-span-2">
+                    <a
+                      href={`https://www.jambase.com/band/${artistMeta.jambase_id.replace("jambase:", "")}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-signal-300 hover:underline"
+                    >
+                      {artistMeta.jambase_id} ↗
+                    </a>
+                  </dd>
+                  {artistMeta.musicbrainz_id ? (
+                    <>
+                      <dt className="text-ink-500">MusicBrainz</dt>
+                      <dd className="sm:col-span-2">
+                        <a
+                          href={`https://musicbrainz.org/artist/${artistMeta.musicbrainz_id}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-signal-300 hover:underline"
+                        >
+                          {artistMeta.musicbrainz_id.slice(0, 8)}… ↗
+                        </a>
+                      </dd>
+                    </>
+                  ) : null}
+                  {artistMeta.wikidata_id ? (
+                    <>
+                      <dt className="text-ink-500">Wikidata</dt>
+                      <dd className="sm:col-span-2">
+                        <a
+                          href={`https://www.wikidata.org/wiki/${artistMeta.wikidata_id}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-signal-300 hover:underline"
+                        >
+                          {artistMeta.wikidata_id} ↗
+                        </a>
+                      </dd>
+                    </>
+                  ) : null}
+                </dl>
+              </div>
+            ) : (
+              <p className="text-sm text-ink-500">
+                No external metadata for <code className="text-ink-300">{primaryArtist}</code> yet. Re-run
+                <code className="ml-1 text-ink-300">scripts/enrich-jambase.py</code> to fetch.
+              </p>
+            )}
           </section>
 
           <section>
@@ -178,9 +298,27 @@ export default function SongPage({ params }: PageProps) {
                 ))
               )}
             </ul>
-          </section>
-        </aside>
-      </div>
-    </main>
-  );
-}
+           </section>
+         </aside>
+       </div>
+       <script
+         type="application/ld+json"
+         dangerouslySetInnerHTML={{
+           __html: JSON.stringify({
+             "@context": "https://schema.org",
+             "@type": "MusicRecording",
+             name: song.title,
+             byArtist: { "@type": "Person", name: song.artist },
+             datePublished: String(song.year),
+             inPlaylist: {
+               "@type": "MusicAlbum",
+               name: `Billboard Hot 100 year-end ${song.year}`,
+             },
+             position: song.chartRank,
+             url: `${process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000"}/song/${encodeURIComponent(song.id)}`,
+           }),
+         }}
+       />
+     </main>
+   );
+ }

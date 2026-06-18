@@ -1,6 +1,14 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { getAllEvents, getSongsByYear } from "@/lib/db/queries";
 import { initDb } from "@/lib/db";
+import { StoryJourney } from "@/components/story/story-journey";
+
+export const metadata: Metadata = {
+  title: "Songs by year, themes, and world events",
+  description:
+    "Browse 150 Billboard Hot 100 year-end songs (2018–2023) through the lens of lyrics, themes, artists, moods, and world events.",
+};
 import { ThemeCloud } from "@/components/lens/theme-cloud";
 import { DEMO_YEARS } from "@/data/chart-seed";
 
@@ -135,6 +143,10 @@ export default function Home() {
         </p>
         <p className="mt-2">Built for Musicathon 2026 — partners: Musixmatch, Replit, ElevenLabs, n8n, Songstats, LALAL.AI, Cyanite, JamBase.</p>
       </footer>
+
+      <section className="mt-12">
+        <StoryJourney />
+      </section>
     </main>
   );
 }

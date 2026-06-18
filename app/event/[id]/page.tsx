@@ -1,8 +1,23 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { getEventById, getSongsForEvent, getAllEvents } from "@/lib/db/queries";
+import type { Metadata } from "next";
+import { getEventById, getSongsForEvent, getAllEvents, getEventSignalDecay, REGION_LABELS } from "@/lib/db/queries";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: { id: string };
+}): Promise<Metadata> {
+  const event = getEventById(decodeURIComponent(params.id));
+  if (!event) return { title: "Event not found" };
+  return {
+    title: event.name,
+    description: `Songs linked to ${event.name} (${event.startDate}–${event.endDate ?? "ongoing"}). ${event.category}.`,
+  };
+}
 import { initDb } from "@/lib/db";
 import { ConfidenceBar, Pill, SectionTitle } from "@/components/ui/primitives";
+import { StoryNextStep } from "@/components/story/story-next-step";
 import { THEME_LABELS, THEME_COLORS } from "@/lib/nlp/theme-scoring";
 import type { Theme } from "@/lib/types";
 
@@ -20,7 +35,7 @@ export default function EventPage({ params }: PageProps) {
     const all = getAllEvents();
     return (
       <main className="mx-auto max-w-6xl px-6 py-10">
-        <h1 className="text-2xl font-semibold">Event not found</h1>
+        <h2 className="text-2xl font-semibold">Event not found</h2>
         <p className="mt-2 text-sm text-ink-400">id: {id}</p>
         <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-2">
           {all.map((ev) => (
@@ -35,6 +50,7 @@ export default function EventPage({ params }: PageProps) {
   }
 
   const linked = getSongsForEvent(event.id, 0.1);
+  const decay = getEventSignalDecay(event.id);
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
@@ -44,6 +60,9 @@ export default function EventPage({ params }: PageProps) {
           <Pill variant="echo">EVENT LENS</Pill>
           <Pill variant="mute">{event.category}</Pill>
           <Pill variant="mute">{event.startDate} → {event.endDate ?? "present"}</Pill>
+          {event.regions.length > 0 ? event.regions.map((r) => (
+            <Pill key={r} variant="mute">{REGION_LABELS[r] ?? r}</Pill>
+          )) : null}
         </div>
         <h1 className="h-display mt-4 text-4xl font-semibold tracking-tight md:text-5xl text-balance">
           {event.name}
@@ -51,9 +70,10 @@ export default function EventPage({ params }: PageProps) {
         <p className="mt-3 max-w-2xl text-ink-300 text-pretty">{event.description}</p>
         <div className="mt-5 flex flex-wrap gap-2">
           {event.relatedThemes.map((t) => (
-            <span
+            <Link
               key={t}
-              className="pill"
+              href={`/theme/${t}`}
+              className="pill hover:opacity-80"
               style={{
                 borderColor: `${THEME_COLORS[t as Theme] ?? "#94a3b8"}55`,
                 background: `${THEME_COLORS[t as Theme] ?? "#94a3b8"}11`,
@@ -61,7 +81,7 @@ export default function EventPage({ params }: PageProps) {
               }}
             >
               {THEME_LABELS[t as Theme] ?? t}
-            </span>
+            </Link>
           ))}
         </div>
       </header>
@@ -128,6 +148,44 @@ export default function EventPage({ params }: PageProps) {
         </ul>
       </section>
 
+      {/* Event signal decay (P2.3) — how long the event's signal persisted */}
+      {decay.length > 1 ? (
+        <section className="mb-10">
+          <SectionTitle subtitle="How the signal to this event changed over subsequent chart years.">
+            Signal decay over time
+          </SectionTitle>
+          <div className="card divide-y divide-ink-800/60">
+            {decay.map((d) => (
+              <div key={d.year} className="flex items-center gap-4 p-3 text-sm">
+                <span className="w-16 font-semibold tabular-nums text-ink-100">
+                  {d.year}
+                </span>
+                <span className="w-20 text-xs text-ink-500">
+                  {d.yearsSinceEvent >= 0 ? `+${d.yearsSinceEvent}yr` : `${d.yearsSinceEvent}yr`}
+                </span>
+                <div className="flex flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
+                  {Object.entries(d.postureCounts)
+                    .sort(([, a], [, b]) => b - a)
+                    .map(([posture, count]) => (
+                      <span key={posture} className="flex items-center gap-1">
+                        <span className="capitalize text-ink-300">{posture}</span>
+                        <span className="text-ink-500">×{count}</span>
+                      </span>
+                    ))}
+                </div>
+                <Pill variant="echo">{d.dominantPosture}</Pill>
+              </div>
+            ))}
+          </div>
+          {decay.length >= 2 ? (
+            <p className="mt-3 text-xs text-ink-500">
+              The first year was {decay[0].dominantPosture}; by year {decay[decay.length - 1].year}, 
+              the posture shifted to {decay[decay.length - 1].dominantPosture}.
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+
       <section>
         <SectionTitle>Try the event in the graph explorer</SectionTitle>
         <div className="card p-6">
@@ -143,6 +201,8 @@ export default function EventPage({ params }: PageProps) {
           </Link>
         </div>
       </section>
+    
+      <StoryNextStep />
     </main>
   );
 }
