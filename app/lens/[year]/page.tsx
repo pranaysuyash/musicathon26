@@ -88,6 +88,8 @@ export default async function LensPage({
   const briefEvidenceSongs = getSongsByIds(briefEvidenceSongIds);
   const briefEvidenceSongById = new Map(briefEvidenceSongs.map((s) => [s.id, s] as const));
   const briefSourceApi = Array.from(new Set(top.map((s) => s.sourceApi)));
+  const compareYear = year === 2020 ? 1969 : 2020;
+  const compareHref = buildLangPath(`/compare/${year}/${compareYear}${region !== "US" ? `?region=${region}` : ""}`, locale);
 
   // Group signals by type
   const themes = signals.filter((s) => s.signalType === "theme").slice(0, 8);
@@ -123,6 +125,12 @@ export default async function LensPage({
         className="text-xs text-ink-400 hover:text-ink-200"
       >
         ← {t(locale, "common.back")} {year} (raw year view)
+      </Link>
+      <Link
+        href={compareHref}
+        className="ml-4 text-xs text-signal-300 hover:text-signal-200"
+      >
+        Compare {year} with {compareYear}
       </Link>
 
       <header className="mt-4 mb-10">

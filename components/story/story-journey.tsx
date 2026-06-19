@@ -64,6 +64,15 @@ export const STORY_JOURNEY: JourneyStep[] = [
     whyItMatters:
       "The artist lens compresses song-level evidence and helps prove that our pipeline preserves continuity across tracks, not only individual hits.",
   },
+  {
+    step: 6,
+    title: "Compare 1969 and 2020",
+    description:
+      "See how the corpus changes across chart eras, then inspect which themes survive and which ones are era-specific.",
+    href: "/compare/1969/2020",
+    whyItMatters:
+      "The comparison view keeps the long-term 1960s–2023 product boundary visible instead of hiding the chart-era distinction inside the data layer.",
+  },
 ];
 
 export function StoryJourney() {
@@ -124,7 +133,7 @@ export function StoryJourney() {
             </p>
           </div>
           <div className="rounded-[1.85rem] border border-ink-800 bg-ink-950/55 p-5">
-            <p className="text-xs uppercase tracking-[0.24em] text-ink-500">Last stop</p>
+            <p className="text-xs uppercase tracking-[0.24em] text-ink-500">Next layer</p>
             <p className="mt-3 text-sm leading-6 text-ink-300">
               The artist profile compresses the same evidence into a broader cultural reading, which
               keeps the exploration loop open after the strongest song and context claims.

@@ -120,6 +120,11 @@ export default function ComparePage({
   const shared = sharedSignals(fromSignals, toSignals);
   const fromOnly = distinctSignals(fromSignals, toSignals);
   const toOnly = distinctSignals(toSignals, fromSignals);
+  const presets = [
+    { label: "1969 vs 2020", href: buildLangPath("/compare/1969/2020", locale, region) },
+    { label: "1985 vs 2020", href: buildLangPath("/compare/1985/2020", locale, region) },
+    { label: "2020 vs 2023", href: buildLangPath("/compare/2020/2023", locale, region) },
+  ];
 
   const leftGraphHref = `/graph?rootType=era&rootId=${encodeURIComponent(nodeEra(fromEra.id))}&hops=2`;
   const rightGraphHref = `/graph?rootType=era&rootId=${encodeURIComponent(nodeEra(toEra.id))}&hops=2`;
@@ -164,6 +169,18 @@ export default function ComparePage({
           Compare two chart moments as different cultural machines, not just different dates.
           The era labels matter because Billboard, radio, downloads, and streaming do not measure the same thing.
         </p>
+        <div className="mt-4 flex flex-wrap gap-2 text-xs">
+          <span className="text-ink-500">Quick comparisons:</span>
+          {presets.map((preset) => (
+            <Link
+              key={preset.label}
+              href={preset.href}
+              className="rounded-full border border-ink-700 px-2.5 py-1 text-ink-300 transition hover:border-signal-400/60 hover:text-signal-100"
+            >
+              {preset.label}
+            </Link>
+          ))}
+        </div>
       </header>
 
       <section className="mb-8 grid gap-4 lg:grid-cols-2">
