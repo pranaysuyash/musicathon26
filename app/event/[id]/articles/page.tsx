@@ -26,7 +26,7 @@ export async function generateMetadata({
     openGraph: {
       images: [
         {
-          url: `/api/og?type=event&title=${encodeURIComponent(`${event.name} • ${t(locale, "articles.title")}`)}&subtitle=${encodeURIComponent(`Event coverage for ${event.name}`)}`,
+          url: `/api/og?type=event&title=${encodeURIComponent(`${event.name} • ${t(locale, "articles.title")}`)}&subtitle=${encodeURIComponent(`Context coverage for ${event.name}`)}`,
           width: 1200,
           height: 630,
         },

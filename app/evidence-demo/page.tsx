@@ -2,22 +2,31 @@
 
 // Test page for the EvidenceDrawer — used to take screenshots
 // showing the drawer with realistic evidence data.
+//
+// Per Decision 0030, the demo edge must reflect what the linker
+// actually produces, not what an older permissive linker used to
+// claim. This demo uses the Straightenin (Migos) → COVID-19
+// lockdowns edge, which is grounded in concrete lyric evidence:
+// "Turn a pandemic into a bandemic" — a direct pandemic reference.
+// (The old demo used Blinding Lights → COVID, which the new
+// linker correctly rejects because the song doesn't reference
+// any COVID keywords.)
 
 import { useState } from "react";
 import { EvidenceDrawer } from "@/components/evidence/evidence-drawer";
 import type { GraphEdge, Evidence } from "@/lib/types";
 
 const SAMPLE_EDGE: GraphEdge = {
-  id: "versesignal:e:versesignal:2020:01:blinding-lights-the-weeknd:associated_with_event:versesignal:ev:covid_19",
-  srcId: "versesignal:n:song:versesignal:2020:01:blinding-lights-the-weeknd",
+  id: "versesignal:e:versesignal:2021:33:straightenin-migos:event:versesignal:ev:covid_19:theme_overlap",
+  srcId: "versesignal:n:song:versesignal:2021:33:straightenin-migos",
   dstId: "versesignal:n:event:versesignal:ev:covid_19",
   edgeType: "associated_with_event",
-  weight: 0.74,
-  confidence: 0.82,
+  weight: 0.55,
+  confidence: 0.6,
   sourceApi: "hybrid",
   evidenceIds: ["ev-1", "ev-2", "ev-3", "ev-4", "ev-5", "ev-6", "ev-7", "ev-8"],
   explanation:
-    "Song charted during the COVID-19 lockdown window. Lyrics contain repeated escape/nightlife/city/loneliness signals, but no direct pandemic references — strong escapist contrast.",
+    "Song lyrics contain a direct pandemic reference. The song-event match is supported by both the literal keyword ('pandemic') and the lockdown-era window (2020–2021) — a keyword-anchored theme overlap, not a theme-only inference.",
 };
 
 const SAMPLE_EVIDENCE: Evidence[] = [
@@ -25,73 +34,73 @@ const SAMPLE_EVIDENCE: Evidence[] = [
     id: "ev-1",
     edgeId: SAMPLE_EDGE.id,
     evidenceType: "lyric_line",
-    value: "I finally took a break, and now I feel like I'm on ecstasy",
+    value: "Turn a pandemic into a bandemic",
     source: "musixmatch",
     confidence: 0.95,
-    createdAt: "2026-01-15T00:00:00Z",
+    createdAt: "2026-06-19T00:00:00Z",
   },
   {
     id: "ev-2",
     edgeId: SAMPLE_EDGE.id,
     evidenceType: "lyric_line",
-    value: "Pull up Maybach, beep-beep, baby. And my shit came with the heat seats, baby",
+    value: "Shoot out the window like Drizzy and Freaky (freak)",
     source: "musixmatch",
     confidence: 0.9,
-    createdAt: "2026-01-15T00:00:00Z",
+    createdAt: "2026-06-19T00:00:00Z",
   },
   {
     id: "ev-3",
     edgeId: SAMPLE_EDGE.id,
     evidenceType: "lyric_term",
-    value: "night, city, escape, dance",
-    source: "gliner",
-    confidence: 0.78,
-    createdAt: "2026-01-15T00:00:00Z",
+    value: "pandemic, window",
+    source: "lexicon",
+    confidence: 0.95,
+    createdAt: "2026-06-19T00:00:00Z",
   },
   {
     id: "ev-4",
     edgeId: SAMPLE_EDGE.id,
     evidenceType: "event_date_overlap",
-    value: "Song peaked at #1 in 2020 (lockdown window 2020-03-15 to 2021-06-01)",
+    value: "Song charted during 2020–2021 lockdown window (2020-03-15 to 2021-06-01)",
     source: "billboard",
     confidence: 1.0,
-    createdAt: "2026-01-15T00:00:00Z",
+    createdAt: "2026-06-19T00:00:00Z",
   },
   {
     id: "ev-5",
     edgeId: SAMPLE_EDGE.id,
-    evidenceType: "mood_score",
-    value: "Mood profile: hopeful 0.84, romantic 0.70, dreamy 0.54 (vs COVID baseline)",
+    evidenceType: "candidate_moment_match",
+    value: "Theme alignment: escape_party 0.42, loneliness 0.31 (lockdown-era themes)",
     source: "lexicon",
     confidence: 0.6,
-    createdAt: "2026-01-15T00:00:00Z",
+    createdAt: "2026-06-19T00:00:00Z",
   },
   {
     id: "ev-6",
     edgeId: SAMPLE_EDGE.id,
-    evidenceType: "entity_match",
-    value: "New York City (city) — chart-relevant for 2020 lockdown-era escapist pop",
-    source: "gliner",
+    evidenceType: "lyric_line",
+    value: "I been going crazy, I don't even know the meaning (yeah)",
+    source: "musixmatch",
     confidence: 0.85,
-    createdAt: "2026-01-15T00:00:00Z",
+    createdAt: "2026-06-19T00:00:00Z",
   },
   {
     id: "ev-7",
     edgeId: SAMPLE_EDGE.id,
-    evidenceType: "embedding_similarity",
-    value: "Cosine similarity to COVID event embedding: 0.74 (top 1% of 2020 chart songs)",
-    source: "embedding",
-    confidence: 0.74,
-    createdAt: "2026-01-15T00:00:00Z",
+    evidenceType: "lyric_line",
+    value: "Straightenin, straightenin, yeah (straight)",
+    source: "musixmatch",
+    confidence: 0.8,
+    createdAt: "2026-06-19T00:00:00Z",
   },
   {
     id: "ev-8",
     edgeId: SAMPLE_EDGE.id,
     evidenceType: "metadata_credit",
-    value: "Manual annotation: song reflects COVID escapist contrast (rule-based, supported by evidence above)",
+    value: "Auto-linked by the keyword-anchored theme_overlap linker (Decision 0030). The song's literal 'pandemic' reference is the primary anchor; the lockdown-era window is the temporal gate.",
     source: "manual",
     confidence: 1.0,
-    createdAt: "2026-01-15T00:00:00Z",
+    createdAt: "2026-06-19T00:00:00Z",
   },
 ];
 
@@ -108,7 +117,7 @@ export default function EvidenceTestPage() {
         </p>
         <div className="mt-6 card p-4">
           <h2 className="text-sm font-semibold">The connection</h2>
-          <p className="mt-2 text-xs text-ink-400">Blinding Lights → COVID-19 lockdowns</p>
+          <p className="mt-2 text-xs text-ink-400">Straightenin (Migos, 2021) → COVID-19 lockdowns</p>
           <p className="mt-2 text-sm text-ink-300">
             {SAMPLE_EDGE.explanation}
           </p>

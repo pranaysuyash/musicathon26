@@ -72,7 +72,7 @@ When recording:
 - `scripts/check-env.ts` also accepts `HUGGINGFACE_API_KEY` as an alias.
 - Cyanite checks accept either `CYANITE_WEBHOOK_SECRET` (webhook) or `CYANITE_API_KEY`.
 
-## The three product flows
+## The four product flows
 
 1. **"What was the world singing in 2020?"** — `/year/2020`
    Shows the year insight (ElevenLabs narration), theme cloud,
@@ -86,12 +86,16 @@ When recording:
 3. **"Show me the COVID-19 lockdown graph"** — `/graph?rootType=event&rootId=versesignal:n:event:versesignal:ev:covid_19&hops=1`
    86 nodes, 85 edges in 1 hop. Click any edge for evidence.
 
+4. **"How did 1969 differ from 2020?"** — `/compare/1969/2020`
+   Shows era-aware signal overlap, unique moods/themes/entities, and direct links into each era graph.
+
 ## Chart-data framing
 
 - **Target scope:** 1960s–2019 US historical chart spine (Billboard Hot 100 year-end + curated transfer rules),
   then **2020–2023 streaming-first context** (Billboard Global 200 / Songstats).
 - **Current demo slice:** **2018–2023**, top 25 per year, from
   Wikipedia year-end lists (curated in `data/chart-seed.ts`).
+- **Graph expansion:** songs now carry era metadata and the graph seeds `belongs_to_era` edges so the compare surface can explain cultural shifts instead of only listing songs.
 
 ## Partner API ownership
 

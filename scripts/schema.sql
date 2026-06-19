@@ -170,7 +170,7 @@ CREATE INDEX IF NOT EXISTS idx_event_articles_event ON event_articles(event_id);
 
 CREATE TABLE IF NOT EXISTS graph_nodes (
   id TEXT PRIMARY KEY,                     -- versesignal:n:<type>:<key>
-  node_type TEXT NOT NULL,                 -- song | artist | year | event | theme | mood | entity | word | chart | region
+  node_type TEXT NOT NULL,                 -- song | artist | year | era | event | theme | mood | entity | word | chart | region
   label TEXT NOT NULL,
   properties_json TEXT                     -- flexible bag
 );
@@ -181,7 +181,7 @@ CREATE TABLE IF NOT EXISTS graph_edges (
   id TEXT PRIMARY KEY,                     -- versesignal:e:<src>:<type>:<dst>
   src_id TEXT NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
   dst_id TEXT NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
-  edge_type TEXT NOT NULL,                 -- performed_by | charted_in | contains_theme | has_mood | mentions_entity | similar_to | associated_with_event | same_event_window | collaboration | shared_songwriter | same_mood_cluster | same_place_reference | emotional_alignment | escapist_contrast
+  edge_type TEXT NOT NULL,                 -- performed_by | charted_in | belongs_to_era | contains_theme | has_mood | mentions_entity | similar_to | associated_with_event | same_event_window | collaboration | shared_songwriter | same_mood_cluster | same_place_reference | emotional_alignment | escapist_contrast
   weight REAL NOT NULL DEFAULT 1.0,
   confidence REAL NOT NULL DEFAULT 0.7,
   evidence_ids_json TEXT,                  -- JSON array of evidence IDs

@@ -7,11 +7,11 @@ const STRINGS = {
     "home.hero-subtitle":
       "When the world was going through something, what was it singing?",
     "home.description":
-      "VerseSignal is a long-term cultural music atlas: target scope is 1960s–2023, staged by chart era. The shipped demo slice is 2018–2023.",
+      "VerseSignal is a long-term music meaning graph: target scope is 1960s–2023, staged by chart era. The shipped demo slice is 2018–2023.",
     "home.era-strategy":
       "Era strategy: 1960s–1970s (chart-memory mode), 1980s–1990s (MTV + radio), 2000s–2010s (digital transition), 2020–2023 (Billboard Global 200 + streaming).",
     "home.pick-year": "Pick a year to start",
-    "home.pick-event": "Or pick a cultural moment",
+    "home.pick-event": "Or pick a context to verify",
     "home.nav.graph": "Open Graph Explorer",
     "home.nav.ask": "Ask the Graph",
     "home.nav.globe": "Cultural Weather Map",
@@ -21,18 +21,18 @@ const STRINGS = {
     "lens.subtitle": "What were the charts saying in",
     "lens.voice-title": "Voice of the year",
     "lens.voice-subtitle": "Region-aware narrated cultural brief for",
-    "lens.events-title": "What was happening in the world",
-    "lens.events-subtitle": "curated world event(s) with a temporal overlap to",
+    "lens.events-title": "Candidate contexts to verify",
+    "lens.events-subtitle": "possible context(s) with a temporal overlap to",
 
     "event.back": "← VerseSignal home",
-    "event.title": "EVENT LENS",
+    "event.title": "CONTEXT LENS",
     "event.not-found": "Event not found",
-    "event.open-in-graph": "Open in Graph Explorer",
-    "event.articles": "Read related event coverage",
+    "event.open-in-graph": "Open in meaning graph",
+    "event.articles": "Read related context coverage",
 
-    "articles.title": "Event articles",
-    "articles.back": "← Back to event",
-    "articles.empty": "No event articles are stored yet. Add rows to event_articles when build/data ingestion supplies source URLs.",
+    "articles.title": "Context articles",
+    "articles.back": "← Back to context",
+    "articles.empty": "No context articles are stored yet. Add rows to event_articles when build/data ingestion supplies source URLs.",
     "articles.none": "No articles available yet.",
 
     "ask.title": "Ask the graph",
@@ -57,11 +57,11 @@ const STRINGS = {
     "home.hero-subtitle":
       "Cuando el mundo estaba viviendo algo intenso, ¿qué estaba cantando?",
     "home.description":
-      "VerseSignal es un atlas cultural musical de largo alcance: alcance objetivo 1960–2023, por eras de ranking. La demo desplegada cubre 2018–2023.",
+      "VerseSignal es un grafo de significado musical de largo alcance: alcance objetivo 1960–2023, por eras de ranking. La demo desplegada cubre 2018–2023.",
     "home.era-strategy":
       "Estrategia por eras: 1960–1970 (memoria de charts), 1980–1990 (MTV + radio), 2000–2010 (transición digital), 2020–2023 (Billboard Global 200 + streaming).",
     "home.pick-year": "Empieza por un año",
-    "home.pick-event": "O por un momento cultural",
+    "home.pick-event": "O por un contexto para verificar",
     "home.nav.graph": "Abrir Graph Explorer",
     "home.nav.ask": "Preguntar al grafo",
     "home.nav.globe": "Mapa climático cultural",
@@ -71,18 +71,18 @@ const STRINGS = {
     "lens.subtitle": "¿Qué decían los charts en",
     "lens.voice-title": "Voz del año",
     "lens.voice-subtitle": "Resumen narrativo con enfoque regional para",
-    "lens.events-title": "Qué estaba pasando en el mundo",
-    "lens.events-subtitle": "eventos culturales rastreados con solapamiento temporal en",
+    "lens.events-title": "Contextos candidatos para verificar",
+    "lens.events-subtitle": "posibles contextos con solapamiento temporal en",
 
     "event.back": "← Inicio de VerseSignal",
-    "event.title": "LENTE DE EVENTO",
+    "event.title": "LENTE DE CONTEXTO",
     "event.not-found": "Evento no encontrado",
-    "event.open-in-graph": "Abrir en el Graph Explorer",
-    "event.articles": "Ver cobertura del evento",
+    "event.open-in-graph": "Abrir en el grafo de significado",
+    "event.articles": "Ver cobertura del contexto",
 
-    "articles.title": "Artículos del evento",
-    "articles.back": "← Volver al evento",
-    "articles.empty": "Aún no hay artículos del evento. Añade filas a event_articles cuando el pipeline de ingesta los proporcione.",
+    "articles.title": "Artículos del contexto",
+    "articles.back": "← Volver al contexto",
+    "articles.empty": "Aún no hay artículos del contexto. Añade filas a event_articles cuando el pipeline de ingesta los proporcione.",
     "articles.none": "Sin artículos disponibles aún.",
 
     "ask.title": "Preguntar al grafo",

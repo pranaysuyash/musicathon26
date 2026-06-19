@@ -10,9 +10,12 @@ import { closeDb, getDb, initDb } from "../lib/db";
 import { CHART_SEED, DEMO_YEARS } from "../data/chart-seed";
 import { CHART_HISTORICAL } from "../data/chart-seed-historical";
 import { CHART_REGIONAL } from "../data/chart-seed-regional";
+import { getChartEraForYear } from "../lib/db/queries";
 import { isProtectedArtist } from "../lib/db/protected-artists";
 import {
+  edgeSongEra,
   nodeArtist,
+  nodeEra,
   nodeSong,
   nodeYear,
   edgeSongArtist,
@@ -27,6 +30,26 @@ function songSlug(title: string, artist: string): string {
 
 function songId(year: number, rank: number, title: string, artist: string): string {
   return `versesignal:${year}:${String(rank).padStart(2, "0")}:${songSlug(title, artist)}`;
+}
+
+function chartEraMetadata(year: number, chartSource: string, region: string, rank: number) {
+  const era = getChartEraForYear(year);
+  return {
+    chartEra: era.id,
+    chartEraLabel: era.label,
+    chartEraRange: era.dateRange,
+    chartRankType: "year_end",
+    chartSource,
+    chartSourceUrl: chartSource === "billboard_hot100_ye"
+      ? "https://www.billboard.com/charts/year-end/hot-100-songs/"
+      : chartSource === "billboard_yearend_historical"
+        ? "https://en.wikipedia.org/wiki/List_of_Billboard_Hot_100_year-end_number-one_singles"
+        : "https://en.wikipedia.org/wiki/List_of_year-end_charts",
+    chartConfidence: 1,
+    chartRegion: region,
+    chartRank: rank,
+    chartSourceNote: `Year-end #${rank} charting song in ${era.label}.`,
+  };
 }
 
 function ensureGraphEdgeColumns(db: ReturnType<typeof getDb>) {
@@ -77,8 +100,8 @@ function main() {
 
   const insertSong = db.prepare(`
     INSERT OR REPLACE INTO songs
-      (id, title, artist, year, chart_source, chart_rank, region, ingested_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      (id, title, artist, year, chart_source, chart_rank, region, ingested_at, metadata_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
   `);
 
   const insertGraphNode = db.prepare(`
@@ -103,6 +126,7 @@ function main() {
   const seedYear = db.transaction((year: number, entries: typeof CHART_SEED[number]) => {
     for (const e of entries) {
       const id = songId(year, e.rank, e.title, e.artist);
+      const chartEra = getChartEraForYear(year);
       // Split multi-artist names properly so all collaborators are preserved.
       // Handles: "X, Y and Z" → ["X", "Y", "Z"], "X featuring Y" → ["X", "Y"]
       // Known band names like "Tones and I" bypass splitting.
@@ -118,12 +142,24 @@ function main() {
       }
       const primaryArtist = allArtists[0]!;
       const artistStr = allArtists.join(", ");
-      insertSong.run(id, e.title, artistStr, year, "billboard_hot100_ye", e.rank, "US");
+      const meta = chartEraMetadata(year, "billboard_hot100_ye", "US", e.rank);
+      insertSong.run(id, e.title, artistStr, year, "billboard_hot100_ye", e.rank, "US", JSON.stringify(meta));
 
       const songNode = nodeSong(id);
       const yearNode = nodeYear(year);
-      insertGraphNode.run(songNode, "song", `${e.title} — ${primaryArtist} (${year})`, null);
-      insertGraphNode.run(yearNode, "year", String(year), null);
+      const eraNode = nodeEra(chartEra.id);
+      insertGraphNode.run(songNode, "song", `${e.title} — ${primaryArtist} (${year})`, JSON.stringify(meta));
+      insertGraphNode.run(yearNode, "year", String(year), JSON.stringify({ year, chartEra: chartEra.id, chartEraLabel: chartEra.label }));
+      insertGraphNode.run(eraNode, "era", chartEra.label, JSON.stringify({
+        id: chartEra.id,
+        label: chartEra.label,
+        start: chartEra.start,
+        end: chartEra.end,
+        dateRange: chartEra.dateRange,
+        sourceMode: chartEra.sourceMode,
+        caveat: chartEra.caveat,
+        comparability: chartEra.comparability,
+      }));
 
       const allArtistNames = [...new Set([primaryArtist, ...allArtists])];
       const artistCount = allArtistNames.length;
@@ -176,6 +212,29 @@ function main() {
         `Year-end rank #${e.rank} on Billboard Hot 100 for year ${year}.`,
         "billboard",
         1.0
+      );
+
+      const eraEdgeId = edgeSongEra(id, chartEra.id);
+      insertEdge.run(
+        eraEdgeId,
+        songNode,
+        eraNode,
+        "belongs_to_era",
+        1.0,
+        0.98,
+        "billboard",
+        null,
+        "manual_curation",
+        null,
+        `${year} belongs to the ${chartEra.label}.`
+      );
+      insertEvidence.run(
+        evidenceRow(eraEdgeId, 0),
+        eraEdgeId,
+        "chart_era_context",
+        `Year ${year} falls in ${chartEra.label} (${chartEra.dateRange}).`,
+        "billboard",
+        0.98
       );
     }
   });
@@ -269,18 +328,20 @@ function seedSingle(s: SeedEntry) {
   }
   const primaryArtist = allArtists[0]!;
   const artistStr = allArtists.join(", ");
+  const era = getChartEraForYear(s.year);
+  const meta = chartEraMetadata(s.year, s.chart_source, s.region, s.rank);
 
   const insertSong = db.prepare(`
     INSERT OR REPLACE INTO songs
-      (id, title, artist, year, chart_source, chart_rank, region, ingested_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      (id, title, artist, year, chart_source, chart_rank, region, ingested_at, metadata_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
   `);
-  insertSong.run(id, s.title, artistStr, s.year, s.chart_source, s.rank, s.region);
+  insertSong.run(id, s.title, artistStr, s.year, s.chart_source, s.rank, s.region, JSON.stringify(meta));
 
   // Per song, prepare the same statements.
   const insertGraphNode = db.prepare(`
     INSERT OR IGNORE INTO graph_nodes (id, node_type, label, properties_json)
-    VALUES (?, ?, ?, NULL)
+    VALUES (?, ?, ?, ?)
   `);
   const insertEdge = db.prepare(`
     INSERT OR IGNORE INTO graph_edges
@@ -295,13 +356,24 @@ function seedSingle(s: SeedEntry) {
 
   const songNode = nodeSong(id);
   const yearNode = nodeYear(s.year);
-  insertGraphNode.run(songNode, "song", `${s.title} — ${primaryArtist} (${s.year})`);
-  insertGraphNode.run(yearNode, "year", String(s.year));
+  const eraNode = nodeEra(era.id);
+  insertGraphNode.run(songNode, "song", `${s.title} — ${primaryArtist} (${s.year})`, JSON.stringify(meta));
+  insertGraphNode.run(yearNode, "year", String(s.year), JSON.stringify({ year: s.year, chartEra: era.id, chartEraLabel: era.label }));
+  insertGraphNode.run(eraNode, "era", era.label, JSON.stringify({
+    id: era.id,
+    label: era.label,
+    start: era.start,
+    end: era.end,
+    dateRange: era.dateRange,
+    sourceMode: era.sourceMode,
+    caveat: era.caveat,
+    comparability: era.comparability,
+  }));
 
   for (const artistName of allArtists) {
     const aNode = nodeArtist(artistName);
     const edgeId = edgeSongArtist(id, idSlug(artistName));
-    insertGraphNode.run(aNode, "artist", artistName);
+    insertGraphNode.run(aNode, "artist", artistName, null);
     insertEdge.run(
       edgeId,
       songNode,
@@ -345,6 +417,29 @@ function seedSingle(s: SeedEntry) {
     s.evidence_value.replace("credits \"%s\" as a performer", "is the year-end #1 song"),
     "billboard",
     1.0
+  );
+
+  const eraEdgeId = edgeSongEra(id, era.id);
+  insertEdge.run(
+    eraEdgeId,
+    songNode,
+    eraNode,
+    "belongs_to_era",
+    1.0,
+    0.98,
+    "billboard",
+    null,
+    "manual_curation",
+    null,
+    `${s.year} belongs to the ${era.label}.`
+  );
+  insertEvidence.run(
+    evidenceRow(eraEdgeId, 0),
+    eraEdgeId,
+    "chart_era_context",
+    `Year ${s.year} falls in ${era.label} (${era.dateRange}).`,
+    "billboard",
+    0.98
   );
 }
 

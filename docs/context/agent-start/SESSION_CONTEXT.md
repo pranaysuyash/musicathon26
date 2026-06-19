@@ -1,6 +1,6 @@
 # Session Context
 
-- Generated: 2026-06-19T08:01:36Z
+- Generated: 2026-06-19T09:43:00Z
 - Project: `musicathon`
 - Provider: `local`
 - Model: `BAAI/bge-m3`
@@ -20,49 +20,49 @@
 ### Architecture Decisions
 - Collection: `projects_proj_musicathon`
 - Query: `architecture decisions for musicathon`
-_Search timed out. Retry when the retrieval store is less busy._
+_Fast mode (--skip-index): retrieval skipped to keep startup non-blocking. Run `/Users/pranay/Projects/agent-start --project musicathon` for full retrieval, or set `AGENT_START_SKIP_INDEX_RETRIEVE=1` if you want retrieval with skip-index._
 
 ### Project Management Workflow
 - Collection: `projects_proj_musicathon`
 - Query: `project management workflow for musicathon`
-_Search timed out. Retry when the retrieval store is less busy._
+_Fast mode (--skip-index): retrieval skipped to keep startup non-blocking. Run `/Users/pranay/Projects/agent-start --project musicathon` for full retrieval, or set `AGENT_START_SKIP_INDEX_RETRIEVE=1` if you want retrieval with skip-index._
 
 ### Known Issues and Worklogs
 - Collection: `projects_proj_musicathon`
 - Query: `known issues and worklog for musicathon`
-_Search timed out. Retry when the retrieval store is less busy._
+_Fast mode (--skip-index): retrieval skipped to keep startup non-blocking. Run `/Users/pranay/Projects/agent-start --project musicathon` for full retrieval, or set `AGENT_START_SKIP_INDEX_RETRIEVE=1` if you want retrieval with skip-index._
 
 ### Prompts and Guidelines
 - Collection: `projects_proj_musicathon`
 - Query: `prompts and guidelines for musicathon`
-_Search timed out. Retry when the retrieval store is less busy._
+_Fast mode (--skip-index): retrieval skipped to keep startup non-blocking. Run `/Users/pranay/Projects/agent-start --project musicathon` for full retrieval, or set `AGENT_START_SKIP_INDEX_RETRIEVE=1` if you want retrieval with skip-index._
 
 ### System Learning Graph
 - Collection: `projects_proj_musicathon`
 - Query: `knowledge graph memory learning feedback loops autoresearch semantic taste graph for musicathon`
-_Search timed out. Retry when the retrieval store is less busy._
+_Fast mode (--skip-index): retrieval skipped to keep startup non-blocking. Run `/Users/pranay/Projects/agent-start --project musicathon` for full retrieval, or set `AGENT_START_SKIP_INDEX_RETRIEVE=1` if you want retrieval with skip-index._
 
 ## Shared Cross-Project Retrieval
 
 ### Reusable Patterns
 - Collection: `projects_workspace_shared`
 - Query: `similar architecture patterns for musicathon`
-_Collection check timed out. Retry shortly._
+_Fast mode (--skip-index): retrieval skipped to keep startup non-blocking. Run `/Users/pranay/Projects/agent-start --project musicathon` for full retrieval, or set `AGENT_START_SKIP_INDEX_RETRIEVE=1` if you want retrieval with skip-index._
 
 ### Process Templates
 - Collection: `projects_workspace_shared`
 - Query: `project management templates and workflows`
-_Search timed out. Retry when the retrieval store is less busy._
+_Fast mode (--skip-index): retrieval skipped to keep startup non-blocking. Run `/Users/pranay/Projects/agent-start --project musicathon` for full retrieval, or set `AGENT_START_SKIP_INDEX_RETRIEVE=1` if you want retrieval with skip-index._
 
 ### Common Failure Modes
 - Collection: `projects_workspace_shared`
 - Query: `lessons learned mistakes retrospectives postmortems`
-_Collection check timed out. Retry shortly._
+_Fast mode (--skip-index): retrieval skipped to keep startup non-blocking. Run `/Users/pranay/Projects/agent-start --project musicathon` for full retrieval, or set `AGENT_START_SKIP_INDEX_RETRIEVE=1` if you want retrieval with skip-index._
 
 ### System Learning Graph
 - Collection: `projects_workspace_shared`
 - Query: `knowledge graph memory learning feedback loops autoresearch semantic taste graph`
-_Search timed out. Retry when the retrieval store is less busy._
+_Fast mode (--skip-index): retrieval skipped to keep startup non-blocking. Run `/Users/pranay/Projects/agent-start --project musicathon` for full retrieval, or set `AGENT_START_SKIP_INDEX_RETRIEVE=1` if you want retrieval with skip-index._
 
 
 ---

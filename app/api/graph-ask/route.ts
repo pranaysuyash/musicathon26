@@ -20,6 +20,7 @@ export const dynamic = "force-dynamic";
 const SONG_NODE_PREFIX = "versesignal:n:song:";
 const EVENT_NODE_PREFIX = "versesignal:n:event:";
 const YEAR_NODE_PREFIX = "versesignal:n:year:";
+const ERA_NODE_PREFIX = "versesignal:n:era:";
 const REGION_NODE_PREFIX = "versesignal:n:region:";
 
 interface AskApiCandidate {
@@ -154,6 +155,7 @@ function normalizeNodePrefix(raw: string): string | null {
   if (nodeId.startsWith("versesignal:n:")) return nodeId;
   if (/^versesignal:ev:/.test(nodeId)) return `${EVENT_NODE_PREFIX}${nodeId}`;
   if (/^versesignal:year:\d{4}$/.test(nodeId)) return `${YEAR_NODE_PREFIX}${nodeId.slice("versesignal:year:".length)}`;
+  if (/^versesignal:era:[a-z0-9:_\-.]+$/.test(nodeId)) return `${ERA_NODE_PREFIX}${nodeId.slice("versesignal:era:".length)}`;
   if (/^versesignal:\d{4}:\d{2}:.+/.test(nodeId)) return `${SONG_NODE_PREFIX}${nodeId}`;
   if (/^\d{4}$/.test(nodeId)) return `${YEAR_NODE_PREFIX}${nodeId}`;
   if (/^\d{4}:\d{2}:.+/.test(nodeId)) return `${SONG_NODE_PREFIX}${nodeId}`;
@@ -176,7 +178,7 @@ function detectNodeTypeHint(raw: string): { term: string; nodeType?: GraphNode["
     if (tag === "mood") return "mood" as const;
     if (tag === "year") return "year" as const;
     if (tag === "region") return "region" as const;
-    if (tag === "era") return "chart";
+    if (tag === "era") return "era" as const;
     return undefined;
   })();
   return { term: rest, nodeType: typed };

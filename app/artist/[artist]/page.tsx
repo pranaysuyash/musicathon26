@@ -114,7 +114,7 @@ export default function ArtistPage({ params }: { params: { artist: string } }) {
               >
                 <span>{t.theme}</span>
                 <span className="text-xs text-ink-400">{t.songCount} songs</span>
-                <span className="text-xs tabular-nums text-ink-300">{t.avgScore.toFixed(0)} score</span>
+                <span className="text-xs tabular-nums text-ink-300">{t.avgScore.toFixed(2)} avg</span>
               </Link>
             ))
           )}

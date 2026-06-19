@@ -21,9 +21,9 @@ function buildLangEventPath(id: string, locale: Locale) {
 }
 
 export const metadata: Metadata = {
-  title: "Songs by year, themes, and world events",
+  title: "Songs, signals, and cultural context",
   description:
-    "Browse the current 2018–2023 seeded demo slice of the long-term VerseSignal corpus (1960s–2023) through the lens of lyrics, themes, artists, moods, and world events.",
+    "Browse the current 2018–2023 seeded demo slice of the long-term VerseSignal corpus (1960s–2023) through the lens of lyrics, themes, artists, moods, entities, and cultural context.",
   openGraph: {
     images: [{ url: "/api/og?type=default", width: 1200, height: 630 }],
   },
@@ -48,10 +48,10 @@ export default function Home({
       eyebrow: "Route 01",
       title: "Start with 2020, then let the signals argue back",
       description:
-        "Open the lyric-first lens and watch the song mood arrive before the event story catches up.",
+        "Open the lyric-first lens and watch the song mood arrive before any single explanation tries to claim the whole story.",
       href: buildLangPath("/lens/2020", locale),
       cta: "Open the 2020 lens",
-      meta: ["song-led", "signal-first", "event-confirmed"],
+      meta: ["song-led", "signal-first", "context-checked"],
       accent: "from-signal-500/20 via-signal-500/10 to-transparent",
     },
     {
@@ -139,7 +139,7 @@ export default function Home({
 
             <p className="mt-5 max-w-2xl text-lg leading-8 text-ink-300 text-pretty">
               VerseSignal is built like an investigation, not a catalog: songs surface the signal,
-              events confirm it, and the graph keeps the proof visible.
+              contexts help test it, and the graph keeps the proof visible.
             </p>
 
             <div className="mt-8 flex flex-wrap gap-3">
@@ -164,12 +164,19 @@ export default function Home({
                 Open the weather map
                 <Globe className="h-4 w-4" />
               </Link>
+              <Link
+                href={buildLangPath("/compare/1969/2020", locale)}
+                className="inline-flex items-center gap-2 rounded-full border border-ink-700 bg-ink-900/60 px-5 py-3 text-sm font-semibold text-ink-100 transition hover:border-signal-400/60 hover:bg-ink-800"
+              >
+                Compare 1969 and 2020
+                <ArrowRight className="h-4 w-4" />
+              </Link>
             </div>
 
             <div className="mt-8 grid gap-3 sm:grid-cols-3">
               <MetricChip value={totalSongs.toString()} label="songs indexed" />
               <MetricChip value={yearCounts.length.toString()} label="years in view" />
-              <MetricChip value={events.length.toString()} label="curated events" />
+              <MetricChip value={events.length.toString()} label="curated contexts" />
             </div>
           </div>
 
@@ -177,7 +184,7 @@ export default function Home({
             <div className="absolute left-6 top-6 h-40 w-40 rounded-full bg-signal-500/15 blur-3xl" />
             <div className="absolute right-0 top-24 h-28 w-28 rounded-full bg-echo-500/15 blur-3xl" />
 
-            <div className="relative overflow-hidden rounded-[1.75rem] border border-ink-700/80 bg-ink-950/75 p-5 shadow-[0_24px_80px_-40px_rgba(14,165,233,0.45)]">
+              <div className="relative overflow-hidden rounded-[1.75rem] border border-ink-700/80 bg-ink-950/75 p-5 shadow-[0_24px_80px_-40px_rgba(14,165,233,0.45)]">
               <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs uppercase tracking-[0.24em] text-ink-500">Signal seismograph</p>
@@ -327,7 +334,7 @@ export default function Home({
             </h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-ink-400">
               Each era card summarizes its song count, top mood, top theme, top named
-              entity, and event coverage so you can pick a starting point by feel instead
+              entity, and context coverage so you can pick a starting point by feel instead
               of scrolling through identical year tiles.
             </p>
           </div>
@@ -398,7 +405,7 @@ export default function Home({
       <section className="mt-8">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.26em] text-ink-500">Candidate contexts</p>
+            <p className="text-xs uppercase tracking-[0.26em] text-ink-500">Context layers</p>
             <h2 className="h-display mt-2 text-2xl md:text-3xl">Possible explanations to verify against the anomaly</h2>
           </div>
           <Link
@@ -456,7 +463,7 @@ export default function Home({
               },
               {
                 title: "Not a static demo",
-                text: "The timeline, event rail, and journey all push users into active exploration.",
+                text: "The timeline, context rail, and journey all push users into active exploration.",
               },
             ].map((item) => (
               <div key={item.title} className="rounded-[1.5rem] border border-ink-800 bg-ink-950/50 p-4">
@@ -471,7 +478,7 @@ export default function Home({
           <p className="text-xs uppercase tracking-[0.26em] text-ink-500">Method layer</p>
           <div className="mt-3 grid gap-3">
             {[
-              "Lyrics, themes, and moods surface the unusual signal",
+              "Lyrics, themes, moods, and entities surface the unusual signal",
               "Candidate contexts rank possible explanations for that signal",
               "Graph edges keep the evidence visible instead of hiding the hypothesis trail",
             ].map((line) => (

@@ -57,6 +57,8 @@ interface SongRow {
 export interface ChartEra {
   id: string;
   label: string;
+  start: number;
+  end: number;
   dateRange: string;
   sourceMode: string;
   caveat: string;
@@ -152,6 +154,7 @@ interface EvidenceRow {
 }
 
 function rowToSong(r: SongRow): Song {
+  const meta = r.metadata_json ? JSON.parse(r.metadata_json) as Record<string, unknown> : undefined;
   return {
     id: r.id,
     title: r.title,
@@ -160,13 +163,20 @@ function rowToSong(r: SongRow): Song {
     chartSource: r.chart_source as Song["chartSource"],
     chartRank: r.chart_rank,
     region: r.region as Song["region"],
+    chartEra: typeof meta?.chartEra === "string" ? meta.chartEra : undefined,
+    chartEraLabel: typeof meta?.chartEraLabel === "string" ? meta.chartEraLabel : undefined,
+    chartEraRange: typeof meta?.chartEraRange === "string" ? meta.chartEraRange : undefined,
+    chartRankType: typeof meta?.chartRankType === "string" ? meta.chartRankType : undefined,
+    chartSourceUrl: typeof meta?.chartSourceUrl === "string" ? meta.chartSourceUrl : undefined,
+    chartConfidence: typeof meta?.chartConfidence === "number" ? meta.chartConfidence : undefined,
+    chartSourceNote: typeof meta?.chartSourceNote === "string" ? meta.chartSourceNote : undefined,
     spotifyId: r.spotify_id ?? undefined,
     musicbrainzId: r.musicbrainz_id ?? undefined,
     musixmatchTrackId: r.musixmatch_track_id ?? undefined,
     durationMs: r.duration_ms ?? undefined,
     releaseDate: r.release_date ?? undefined,
     ingestedAt: r.ingested_at,
-    metadata: r.metadata_json ? JSON.parse(r.metadata_json) : undefined,
+    metadata: meta,
   };
 }
 
@@ -232,7 +242,9 @@ export function getChartEraForYear(year: number): ChartEra {
     return {
       id: era.id,
       label: era.label,
-      dateRange: `${era.start}s–${era.end}`,
+      start: era.start,
+      end: era.end,
+      dateRange: `${era.start}–${era.end}`,
       sourceMode: era.sourceMode,
       caveat: era.caveat,
       comparability: era.comparability,
@@ -241,6 +253,8 @@ export function getChartEraForYear(year: number): ChartEra {
   return {
     id: "custom_era",
     label: "Custom era",
+    start: year,
+    end: year,
     dateRange: `${year}`,
     sourceMode: "Manual/experimental ingestion",
     caveat: "No standardized chart-era contract is assigned yet.",
@@ -1015,11 +1029,16 @@ export function getArtistSongs(artistName: string, limit: number = 60): ArtistSo
   const pattern = `%${normalized}%`;
   return all<Row>(
     `
-    SELECT id, title, artist, year, chart_rank
-      FROM songs
-     WHERE LOWER(artist) = LOWER(?)
-        OR LOWER(artist) LIKE ?
-     ORDER BY year DESC, chart_rank ASC
+    -- Per motto 0.11: one row per (title, year) on the artist
+    -- catalog. Same song charted in multiple regions (US, UK,
+    -- DE) appears once per year. Without this dedup, a global hit
+    -- like Blinding Lights shows 4+ times and confuses the user.
+    SELECT s.id, s.title, s.artist, s.year, MIN(s.chart_rank) AS chart_rank
+      FROM songs s
+     WHERE LOWER(s.artist) = LOWER(?)
+        OR LOWER(s.artist) LIKE ?
+     GROUP BY s.title, s.year
+     ORDER BY s.year DESC, MIN(s.chart_rank) ASC
      LIMIT ?
     `,
     artistName,
@@ -1044,7 +1063,11 @@ export function getArtistThemeSignals(artistName: string, limit: number = 12): A
   const pattern = `%${normalized}%`;
   return all<Row>(
     `
-    SELECT ts.theme, COUNT(*) AS song_count, AVG(ts.score) AS avg_score
+    -- Dedup on (title, year) so the artist-theme rollup reflects
+    -- unique chart entries, not regional duplicates.
+    SELECT ts.theme,
+           COUNT(DISTINCT s.title || '|' || s.year) AS song_count,
+           AVG(ts.score) AS avg_score
       FROM theme_scores ts
       JOIN songs s ON s.id = ts.song_id
      WHERE LOWER(s.artist) = LOWER(?)
@@ -1075,7 +1098,8 @@ export function getArtistEventLinks(artistName: string, limit: number = 20): Art
   const pattern = `%${normalized}%`;
   return all<Row>(
     `
-    SELECT ev.id, ev.name, ev.start_date, ev.category, COUNT(DISTINCT s.id) AS song_count
+    SELECT ev.id, ev.name, ev.start_date, ev.category,
+           COUNT(DISTINCT s.title || '|' || s.year) AS song_count
       FROM songs s
       JOIN graph_edges ge
         ON ge.src_id = 'versesignal:n:song:' || s.id
@@ -2183,14 +2207,22 @@ export function getEraOverview(region: string = "US"): EraOverviewRow[] {
   // the user can pick a starting point instead of scrolling.
   const rows: EraOverviewRow[] = [];
   for (const era of CHART_ERAS) {
+    // Per motto 0.11, count unique chart entries (title+year) so
+    // a song charting in US/UK/DE isn't triple-counted.
     const cnt = (get<{ c: number }>(
-      `SELECT COUNT(*) AS c FROM songs s WHERE s.region = ? AND s.year BETWEEN ? AND ?`,
+      `SELECT COUNT(*) AS c FROM (
+         SELECT s.title, s.year FROM songs s
+         WHERE s.region = ? AND s.year BETWEEN ? AND ?
+         GROUP BY s.title, s.year
+       )`,
       region,
       era.start,
       era.end,
     )?.c) ?? 0;
     const years = all<{ y: number }>(
-      `SELECT DISTINCT s.year AS y FROM songs s WHERE s.region = ? AND s.year BETWEEN ? AND ? ORDER BY s.year`,
+      `SELECT s.year AS y FROM songs s
+         WHERE s.region = ? AND s.year BETWEEN ? AND ?
+         GROUP BY s.year ORDER BY s.year`,
       region, era.start, era.end,
     );
     // Top mood: pick the mood signal with the highest song_count
@@ -2214,13 +2246,13 @@ export function getEraOverview(region: string = "US"): EraOverviewRow[] {
       region, era.start, era.end,
     );
     // Top entity: most-mentioned entity in songs whose year falls
-    // in the era window.
+    // in the era window. Per motto 0.11 we dedup on
+    // (entity, title, year) so a single chart hit isn't counted
+    // twice for being in multiple regions.
     const topEntity = get<{ canonical_name: string; c: number }>(
-      `SELECT e.canonical_name, COUNT(*) AS c
+      `SELECT e.canonical_name, COUNT(DISTINCT s.title || '|' || s.year) AS c
          FROM entity_mentions em
-         JOIN songs s ON s.id = REPLACE(em.song_id, 'versesignal:s:', '')
-                       OR s.id = em.song_id
-                       OR em.song_id LIKE '%' || s.id
+         JOIN songs s ON s.id = em.song_id
          JOIN entities e ON e.id = em.entity_id
          WHERE s.region = ? AND s.year BETWEEN ? AND ?
          GROUP BY e.id

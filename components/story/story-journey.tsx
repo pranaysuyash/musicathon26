@@ -21,27 +21,27 @@ export interface JourneyStep {
 export const STORY_JOURNEY: JourneyStep[] = [
   {
     step: 1,
-    title: "2020 — what were the charts saying?",
+    title: "2020 — what were the charts signaling?",
     description:
       "The lyrics-first signal profile: 18 signals across 25 chart songs, ranked by how much they shifted vs the prior 3-year baseline.",
     href: "/lens/2020",
     whyItMatters:
-      "This is the surface that turns the graph from data viz into a cultural analysis engine. The auto-generated takeaway answers 'what were people feeling' before showing any events.",
+      "This is the surface that turns the graph from data viz into a cultural analysis engine. The auto-generated takeaway answers what the chart is doing before any one explanation is imposed.",
   },
   {
     step: 2,
     title: "Candidate context: COVID-19 lockdowns",
     description:
-      "One possible explanation for the 2020 anomaly. See the signal deltas, then judge whether the event actually fits the songs.",
+      "One possible explanation for the 2020 anomaly. See the signal deltas, then judge whether the context actually fits the songs.",
     href: "/event/versesignal:ev:covid_19",
     whyItMatters:
-      "Events are evidence checks, not starting assumptions. The page shows whether a real-world context is supported, overfit, or rejected.",
+      "Contexts are evidence checks, not starting assumptions. The page shows whether a real-world context is supported, overfit, or rejected.",
   },
   {
     step: 3,
     title: "Verification graph",
     description:
-      "A 2-hop neighborhood of the hypothesis: every song, theme, entity, and event connected to the candidate context. Click any edge to see evidence.",
+      "A 2-hop neighborhood of the hypothesis: every song, theme, entity, and context connected to the candidate. Click any edge to see evidence.",
     href: "/graph?rootType=event&rootId=versesignal%3An%3Aevent%3Aversesignal%3Aev%3Acovid_19&hops=2",
     whyItMatters:
       "This is the secondary surface. It’s where we test and inspect the hypothesis after the song-led anomaly appears.",
@@ -50,10 +50,10 @@ export const STORY_JOURNEY: JourneyStep[] = [
     step: 4,
     title: "Blinding Lights",
     description:
-      "The #1 song of 2020. The song-event connection (lockdowns ↔ party/nightlife escape) is the canonical cultural-posture example.",
+      "The #1 song of 2020. The song-context connection (lockdowns ↔ party/nightlife escape) is one canonical cultural-posture example.",
     href: "/song/versesignal:2020:01:blinding-lights-the-weeknd",
     whyItMatters:
-      "The song page shows: themes, moods, entities, event connections, similar songs, and the artist metadata. The graph is in every section.",
+      "The song page shows: themes, moods, entities, context connections, similar songs, and the artist metadata. The graph is in every section.",
   },
   {
     step: 5,
@@ -127,7 +127,7 @@ export function StoryJourney() {
             <p className="text-xs uppercase tracking-[0.24em] text-ink-500">Last stop</p>
             <p className="mt-3 text-sm leading-6 text-ink-300">
               The artist profile compresses the same evidence into a broader cultural reading, which
-              keeps the exploration loop open after the strongest song and event claims.
+              keeps the exploration loop open after the strongest song and context claims.
             </p>
           </div>
         </div>

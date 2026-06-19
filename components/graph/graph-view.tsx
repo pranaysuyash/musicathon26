@@ -35,6 +35,7 @@ const NODE_COLORS: Record<string, string> = {
   song: "#7dd3fc",
   artist: "#f0abfc",
   year: "#fde047",
+  era: "#fb923c",
   event: "#f87171",
   theme: "#34d399",
   mood: "#a78bfa",
@@ -47,6 +48,7 @@ const NODE_COLORS: Record<string, string> = {
 const EDGE_COLORS: Record<string, string> = {
   performed_by: "rgba(240, 171, 252, 0.4)",
   charted_in: "rgba(253, 224, 71, 0.35)",
+  belongs_to_era: "rgba(251, 146, 60, 0.42)",
   contains_theme: "rgba(52, 211, 153, 0.45)",
   has_mood: "rgba(167, 139, 250, 0.4)",
   mentions_entity: "rgba(251, 191, 36, 0.5)",
@@ -64,7 +66,7 @@ export function GraphView({ nodes, edges, onSelectEdge, onSelectNode, rootId, he
       name: n.label,
       nodeType: n.nodeType,
       color: n.id === rootId ? "#fff" : NODE_COLORS[n.nodeType] ?? "#94a3b8",
-      val: n.nodeType === "event" ? 6 : n.nodeType === "year" ? 4 : n.nodeType === "song" ? 5 : 3,
+      val: n.nodeType === "event" ? 6 : n.nodeType === "year" || n.nodeType === "era" ? 4 : n.nodeType === "song" ? 5 : 3,
     }));
     const links = edges.map((e) => ({
       id: e.id,

@@ -5,7 +5,7 @@ import { GraphExplorer } from "@/components/graph/graph-explorer";
 export const metadata: Metadata = {
   title: "Knowledge graph",
   description:
-    "Explore the VerseSignal knowledge graph across the long-term corpus target (1960s–2023), with the shipped demo slice covering 2018–2023.",
+    "Explore the VerseSignal knowledge graph across the long-term corpus target (1960s–2023), including era nodes, year lenses, and cross-era comparison paths.",
   openGraph: {
     images: [
       {

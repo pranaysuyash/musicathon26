@@ -226,6 +226,30 @@ export function GraphExplorer() {
         <button
           onClick={() =>
             jumpTo(
+              `/graph?rootType=era&rootId=versesignal:n:era:broadcast_counterculture&hops=${hops}`,
+              "jump_era_1960s",
+              "Shifting to the broadcast/counterculture era."
+            )
+          }
+          className="pill pill-mute"
+        >
+          1960s era
+        </button>
+        <button
+          onClick={() =>
+            jumpTo(
+              `/graph?rootType=era&rootId=versesignal:n:era:global_streaming_era&hops=${hops}`,
+              "jump_era_2020s",
+              "Shifting to the global streaming era."
+            )
+          }
+          className="pill pill-mute"
+        >
+          2020s era
+        </button>
+        <button
+          onClick={() =>
+            jumpTo(
               `/graph?rootType=event&rootId=versesignal:n:event:versesignal:ev:covid_19&hops=${hops}`,
               "jump_covid",
               "Shifting to COVID event cluster."

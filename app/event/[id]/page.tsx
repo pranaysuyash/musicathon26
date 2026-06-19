@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { getEventById, getSongsForEvent, getAllEvents, getEventSignalDecay, getEventLeadAnalysis, REGION_LABELS } from "@/lib/db/queries";
+import { getEventById, getSongsForEvent, getAllEvents, getEventSignalDecay, getEventLeadAnalysis, getEventArticles, REGION_LABELS } from "@/lib/db/queries";
 import { t, resolveLocale } from "@/lib/i18n/strings";
 import { BecauseCard } from "@/components/evidence/because-card";
 import type { EvidencePreviewItem } from "@/components/evidence/evidence-preview";
@@ -71,6 +71,7 @@ export default function EventPage({ params, searchParams }: PageProps) {
   const linked = getSongsForEvent(event.id, 0.1);
   const decay = getEventSignalDecay(event.id);
   const lead = getEventLeadAnalysis(event.id);
+  const articles = getEventArticles(event.id);
   const linkedSources = Array.from(
     new Set(["billboard", ...linked.flatMap((row) => [row.edge.sourceApi, ...row.evidence.map((e) => e.source)])])
   );
@@ -335,18 +336,57 @@ export default function EventPage({ params, searchParams }: PageProps) {
         </section>
       ) : null}
 
+      {articles.length > 0 ? (
+        <section className="mb-10">
+          <SectionTitle subtitle="Curated background articles that explain the context.">
+            Context articles ({articles.length})
+          </SectionTitle>
+          <div className="grid gap-3 md:grid-cols-2">
+            {articles.slice(0, 2).map((article) => (
+              <article key={article.id} className="card p-4">
+                <p className="text-xs uppercase tracking-wider text-ink-500">{article.source}</p>
+                <a
+                  href={article.sourceUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-1 block text-sm font-medium text-ink-100 hover:text-signal-300"
+                >
+                  {article.title}
+                </a>
+                {article.publishedAt ? (
+                  <p className="mt-1 text-xs text-ink-500">{article.publishedAt}</p>
+                ) : null}
+                {article.summary ? (
+                  <p className="mt-2 text-sm leading-6 text-ink-300">{article.summary}</p>
+                ) : null}
+              </article>
+            ))}
+          </div>
+          {articles.length > 2 ? (
+            <div className="mt-3">
+              <Link
+                href={`/event/${encodeURIComponent(event.id)}/articles${locale !== "en" ? `?lang=${locale}` : ""}`}
+                className="text-sm font-medium text-signal-200 hover:text-signal-100"
+              >
+                View all {articles.length} articles
+              </Link>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
       <section>
-        <SectionTitle>Try the event in the graph explorer</SectionTitle>
+        <SectionTitle>Try this context in the graph explorer</SectionTitle>
         <div className="card p-6">
           <p className="mb-4 text-sm text-ink-300">
-            The graph view will center on this event node, show all songs linked to it, and reveal
+            The graph view will center on this context node, show all songs linked to it, and reveal
             the themes and entities that drove each connection.
           </p>
           <Link
             href={`/graph?rootType=event&rootId=versesignal:n:event:${event.id}`}
             className="inline-block rounded-lg bg-signal-500 px-5 py-2.5 text-sm font-medium text-ink-950 transition hover:bg-signal-400"
           >
-            Open in Graph Explorer →
+            Open in meaning graph →
           </Link>
         <Link
           href={`/event/${encodeURIComponent(event.id)}/articles${locale !== "en" ? `?lang=${locale}` : ""}`}

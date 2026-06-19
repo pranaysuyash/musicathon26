@@ -11,6 +11,7 @@
 - Reframed the guided story as a mosaic instead of a numbered list.
 - Swapped the global typography shell to `Fraunces` + `Manrope` + `IBM Plex Mono` for a more distinctive, magazine-like voice.
 - Added a stronger ambient background treatment and grid texture so the app no longer reads as a default SaaS surface.
+- Generalized the product framing toward a music meaning graph, where events are one verification layer among vibes, emotions, themes, entities, and other cultural contexts.
 
 ## Verification
 
@@ -22,4 +23,4 @@
 
 - The home page now carries the “start with 2020” narrative and the “signal seismograph” preview above the fold.
 - The globe surface now has a real cultural-weather prototype path: `react-globe.gl` first, 2D fallback second, and a docs-backed decision record for the long-term choice.
-- The product thesis is now phrased as song-led anomaly detection plus candidate-context verification, so event pages read as hypothesis checks instead of starting assumptions.
+- The product thesis is now phrased as song-led anomaly detection plus candidate-context verification, so context pages read as hypothesis checks instead of starting assumptions.

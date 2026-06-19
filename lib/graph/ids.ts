@@ -42,6 +42,10 @@ export const nodeEntity = (entityType: string, slug: string): string =>
 export const nodeYear = (year: number): string =>
   `${NODE_PREFIX}:year:${year}`;
 
+/** `versesignal:n:era:<slug>` (chart-era node) */
+export const nodeEra = (eraId: string): string =>
+  `${NODE_PREFIX}:era:${eraId}`;
+
 /** `versesignal:n:region:<code>` (region node) */
 export const nodeRegion = (regionCode: string): string =>
   `${NODE_PREFIX}:region:${regionCode.toLowerCase()}`;
@@ -82,6 +86,10 @@ export const edgeSongArtist = (songId: string, artistSlug: string): string =>
 export const edgeSongYear = (songId: string, year: number): string =>
   `${EDGE_PREFIX}:song-year:${songId}:${year}`;
 
+/** `versesignal:e:song-era:<song-id>:<era-id>` */
+export const edgeSongEra = (songId: string, eraId: string): string =>
+  `${EDGE_PREFIX}:song-era:${songId}:${eraId}`;
+
 // === EVIDENCE ===
 
 /** `versesignal:ev:<edge-id>:<idx>` (idx is 0-based per edge) */
@@ -103,7 +111,7 @@ export function slug(input: string): string {
 
 // === VALIDATION ===
 
-const NODE_RE = /^versesignal:n:(song|artist|event|theme|entity|year|region):[a-z0-9][a-z0-9:_\-.]{0,254}$/;
+const NODE_RE = /^versesignal:n:(song|artist|event|theme|entity|year|era|region):[a-z0-9][a-z0-9:_\-.]{0,254}$/;
 const EDGE_RE = /^versesignal:e:[a-z-]+:[a-z0-9:_\-.]{1,400}$/;
 const EVIDENCE_RE = /^versesignal:ev:[a-z0-9:_\-.]+:[0-9]+$/;
 

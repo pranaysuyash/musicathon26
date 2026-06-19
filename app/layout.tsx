@@ -34,7 +34,7 @@ export const metadata: Metadata = {
     template: "%s · VerseSignal",
   },
   description:
-    "Explore how popular songs, lyrics, artists, moods, collaborators, and world events connect across time.",
+    "Explore how popular songs, lyrics, artists, moods, entities, scenes, cultural contexts, and world events connect across time.",
   applicationName: "VerseSignal",
   keywords: [
     "music",
@@ -44,6 +44,9 @@ export const metadata: Metadata = {
     "artists",
     "themes",
     "moods",
+    "entities",
+    "cultural contexts",
+    "meaning graph",
     "world events",
     "music history",
   ],

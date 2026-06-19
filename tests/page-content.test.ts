@@ -42,7 +42,7 @@ const PAGES: PageCheck[] = [
     expectInBody: [
       "Start with 2020",
       "Start with a song anomaly, then test candidate explanations",
-      "Candidate contexts",
+      "Context layers",
     ],
   },
   // === ERA MOSAIC: the home page surfaces a small mosaic of eras
@@ -75,6 +75,11 @@ const PAGES: PageCheck[] = [
     path: "/lens/1969",
     expectInBody: ["1969", "Aquarius"],
   },
+  {
+    name: "/compare/1969/2020 shows the era comparison",
+    path: "/compare/1969/2020",
+    expectInBody: ["1969 vs 2020", "Broadcast / counterculture era", "Global streaming era"],
+  },
   // === SONG PAGE: the per-song evidence surface.
   // Per Decision 0030, the linker requires SPECIFIC event keywords
   // in the song's lyrics before claiming an event link. Blinding
@@ -93,9 +98,9 @@ const PAGES: PageCheck[] = [
   },
   // === EVENT PAGE: the per-event lens
   {
-    name: "/event/covid_19 has the event name",
+    name: "/event/covid_19 has the context name",
     path: "/event/versesignal:ev:covid_19",
-    expectInBody: ["COVID-19", "2020"],
+    expectInBody: ["COVID-19", "2020", "Context articles"],
   },
   {
     name: "/event/ukraine_war shows the war",
@@ -118,6 +123,20 @@ const PAGES: PageCheck[] = [
     name: "/year/1985 historical year renders",
     path: "/year/1985",
     expectInBody: ["1985"],
+  },
+  // === GRAPH EXPLORER: the /graph surface should render the
+  // explorer shell. The data loads client-side after mount; we
+  // assert the shell + the era quick-jump chips are present, plus
+  // the API response (which IS server-rendered) for the era root.
+  {
+    name: "/graph renders the explorer shell with era quick-jumps",
+    path: "/graph",
+    expectInBody: ["Knowledge graph", "Jump to:", "era", "Discovery Meter"],
+  },
+  {
+    name: "/api/graph returns an era neighborhood",
+    path: "/api/graph?nodeId=versesignal:n:era:global_streaming_era&rootType=era&hops=2",
+    expectInBody: ["Global streaming era", "belongs_to_era"],
   },
   // === ASK API: the NL→graph resolver
   {

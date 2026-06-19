@@ -35,7 +35,7 @@ DB_PATH = REPO / "data" / "versesignal.db"
 # themselves), strict on the prefix + type-token shape.
 NODE_RE = re.compile(
     r"^versesignal:n:"
-    r"(song|artist|event|theme|entity|year|region):"
+    r"(song|artist|event|theme|entity|year|era|region):"
     r".+$"
 )
 EDGE_RE = re.compile(r"^versesignal:e:.+$")

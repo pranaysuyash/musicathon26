@@ -966,24 +966,25 @@ def main() -> int:
                   (id, src_id, dst_id, edge_type, weight, confidence, evidence_ids_json, source_api, model_version, inference_type, matched_terms_json, explanation)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (
-                    edge_id,
-                    song_node,
-                    ent_node,
-                    "mentions_entity",
-                    1.0,
-                    float(ent["confidence"]),
-                    json.dumps([ev_id]),
-                    ent["source"],
-                    source_api,
-                    mention_version,
-                    "named_entity_match",
-                    matched_terms_json,
-                    f"NER detected '{ent['text']}' ({ent['label']}) in lyrics."
-                    if not is_gaz
-                    else f"Gazetteer mapped '{ent['text']}' to '{canonical_label}' ({ent['label']}).",
-                ),
-            )
+                    (
+                        edge_id,
+                        song_node,
+                        ent_node,
+                        "mentions_entity",
+                        1.0,
+                        float(ent["confidence"]),
+                        json.dumps([ev_id]),
+                        ent["source"],
+                        source_api,
+                        (
+                            f"Gazetteer mapped '{ent['text']}' to '{canonical_label}' ({ent['label']})."
+                            if is_gaz
+                            else f"NER detected '{ent['text']}' ({ent['label']}) in lyrics."
+                        ),
+                        "named_entity_match",
+                        matched_terms_json,
+                    ),
+                )
             conn.execute(
                 """
                 INSERT OR REPLACE INTO evidence
@@ -1026,9 +1027,9 @@ def main() -> int:
                 # Insert graph edge first (FK target), then evidence rows.
                 conn.execute(
                     """
-                    INSERT OR REPLACE INTO graph_edges
-                      (id, src_id, dst_id, edge_type, weight, confidence, evidence_ids_json, source_api, model_version, inference_type, matched_terms_json, explanation)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT OR REPLACE INTO graph_edges
+                  (id, src_id, dst_id, edge_type, weight, confidence, evidence_ids_json, source_api, model_version, explanation, inference_type, matched_terms_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         edge_id,
@@ -1040,9 +1041,9 @@ def main() -> int:
                         json.dumps([]),
                         "hybrid",
                         model_version,
+                        " ".join(explanation_parts),
                         link_type,
                         json.dumps(sorted(set(matched_terms))),
-                        " ".join(explanation_parts),
                     ),
                 )
                 for i, line in enumerate(evidence_lines):
@@ -1102,7 +1103,7 @@ def main() -> int:
             conn.execute(
                 """
                 INSERT OR REPLACE INTO graph_edges
-                  (id, src_id, dst_id, edge_type, weight, confidence, evidence_ids_json, source_api, model_version, inference_type, matched_terms_json, explanation)
+                  (id, src_id, dst_id, edge_type, weight, confidence, evidence_ids_json, source_api, model_version, explanation, inference_type, matched_terms_json)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
@@ -1115,9 +1116,9 @@ def main() -> int:
                     json.dumps([ev_id]),
                     source,
                     model_version,
+                    f"Theme scoring from {source}.",
                     "theme_overlap",
                     None,
-                    f"Theme scoring from {source}.",
                 ),
             )
             conn.execute(

@@ -35,6 +35,11 @@ The current shipped flow remains demo-first (2018–2023), but the system behavi
 ### 4) `/year/[year]` now era-aware
 - The year page now shows chart-era label/source metadata and points users to `/lens/[year]` for discovery-first interpretation.
 
+### 5) Chart-era artifacts now exist in the graph and comparison surface
+- Seeded `belongs_to_era` graph edges and `era` graph nodes so chart eras are first-class navigable objects, not just labels.
+- Persisted chart-era metadata into song `metadata_json` during seeding so downstream tools can reason about rank type, source mode, and era provenance.
+- Added `/compare/[from]/[to]` to contrast two years across signals, songs, and era context.
+
 ## Why this preserves first principles
 
 - Removes the false finality of the 2018–2023 demo window in product routes.
@@ -43,6 +48,6 @@ The current shipped flow remains demo-first (2018–2023), but the system behavi
 
 ## Next stage (not yet landed)
 
-- Add persistent chart-era-aware song metadata (`chart_era`, `rank_type`, `source_url`, confidence) either as song fields or a `chart_entries` table.
+- Add a dedicated era timeline surface that lets users browse era-by-era instead of only year-by-year.
+- Promote chart-era metadata into a dedicated table if multi-source chart inventory becomes a first-class ingest path.
 - Build candidate-moment-first discovery outputs (signal spikes/clusters/pulse moments) as first-class outputs before curated event matching.
-- Add chart-era nodes/edges (`chart_era`, `belongs_to_era`) and a dedicated era timeline surface.

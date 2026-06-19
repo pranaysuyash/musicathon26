@@ -81,13 +81,15 @@ const ASK_EXAMPLES = [
   "Find a path from Blinding Lights to COVID-19",
   "Connect 2020 and Ukraine war",
   "Show a path between loneliness and escape",
+  "Link Drake to identity",
 ];
 
 const EDGE_TYPES = [
-  { value: "associated_with_event", label: "Event" },
+  { value: "associated_with_event", label: "Context" },
   { value: "contains_theme", label: "Theme" },
   { value: "mentions_entity", label: "Entity" },
-  { value: "similar_to", label: "Similar" },
+  { value: "similar_to", label: "Similarity" },
+  { value: "belongs_to_era", label: "Era" },
   { value: "performed_by", label: "Artist" },
 ];
 
@@ -112,6 +114,18 @@ export function PathPanel({
   } | null>(null);
   const [candidateFromId, setCandidateFromId] = useState<string | null>(null);
   const [candidateToId, setCandidateToId] = useState<string | null>(null);
+
+  const syncAskUrl = useCallback((query: string) => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const trimmed = query.trim();
+    if (trimmed) {
+      url.searchParams.set("q", trimmed);
+    } else {
+      url.searchParams.delete("q");
+    }
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  }, []);
 
   const presets: Array<{ label: string; from: string; to: string }> = [
     {
@@ -243,6 +257,7 @@ export function PathPanel({
           insight: typed.insight,
           edgeEvidence: typed.edgeEvidence,
         });
+        syncAskUrl(query);
         setFrom(typed.from.id);
         setTo(typed.to.id);
         setCandidateFromId(typed.from.id);
@@ -258,7 +273,7 @@ export function PathPanel({
         setLoading(false);
       }
     },
-    [askInput, edgeTypes, onPathFound]
+    [askInput, edgeTypes, onPathFound, syncAskUrl]
   );
 
   const runFromSelectedCandidates = useCallback(() => {
@@ -324,6 +339,9 @@ export function PathPanel({
     if (node.nodeType === "year") {
       return `/year/${encodeURIComponent(node.label)}`;
     }
+    if (node.nodeType === "era") {
+      return `/graph?rootType=era&rootId=${encodeURIComponent(node.id)}&hops=2`;
+    }
     if (node.nodeType === "region") {
       return `/globe?region=${encodeURIComponent(node.label)}`;
     }
@@ -353,11 +371,11 @@ export function PathPanel({
           </span>
         </div>
         <label className="block">
-          <span className="text-xs uppercase tracking-wider text-ink-500">Ask the graph</span>
+          <span className="text-xs uppercase tracking-wider text-ink-500">Ask the meaning graph</span>
           <textarea
             value={askInput}
             onChange={(e) => setAskInput(e.target.value)}
-            placeholder='Try "Show a path from 2020 to Ukraine war"'
+            placeholder='Try "Show a path from 2020 to lonely"'
             rows={2}
             className="mt-1 w-full rounded border border-ink-800 bg-ink-900/60 px-3 py-2 text-sm text-ink-100 placeholder:text-ink-600 focus:border-signal-500 focus:outline-none"
           />

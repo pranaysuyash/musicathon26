@@ -17,6 +17,13 @@ export interface Song {
   chartSource: ChartSource;
   chartRank: number;           // 1..25 (or peak position)
   region: Region;
+  chartEra?: string;
+  chartEraLabel?: string;
+  chartEraRange?: string;
+  chartRankType?: string;
+  chartSourceUrl?: string;
+  chartConfidence?: number;
+  chartSourceNote?: string;
   spotifyId?: string;
   musicbrainzId?: string;
   musixmatchTrackId?: number;
@@ -129,6 +136,7 @@ export type NodeType =
   | "song"
   | "artist"
   | "year"
+  | "era"
   | "event"
   | "theme"
   | "mood"
@@ -141,6 +149,7 @@ export type EdgeType =
   | "performed_by"
   | "featured_on"
   | "charted_in"
+  | "belongs_to_era"
   | "contains_theme"
   | "has_mood"
   | "mentions_entity"
