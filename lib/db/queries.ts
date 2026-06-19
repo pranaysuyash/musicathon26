@@ -1172,18 +1172,41 @@ export function getYearSignals(
     source_api: string;
     computed_at: string;
   }
+  // Per type, return the top `limitPerType` signals ranked by
+  // song_count (not raw score — scores are on different scales
+  // across mood/theme/entity, so a raw sort leaves themes and
+  // entities out of the top results). song_count is comparable
+  // across types.
   const rows = all<Row>(
     `
     SELECT * FROM year_signal_profiles
     WHERE year = ? AND region = ?
-    ORDER BY score DESC
-    LIMIT ?
+      AND (
+        (signal_type = 'mood' AND score > 0)
+        OR (signal_type = 'theme')
+        OR (signal_type = 'entity')
+      )
+    ORDER BY signal_type, song_count DESC
     `,
     year,
     region,
-    limitPerType * 3  // fetch enough to cover each type
   );
-  return rows.map((r) => ({
+  // Per-type top N. The query is sorted by signal_type then
+  // song_count DESC, so we slice each type independently to its
+  // limit. Without this, a high-volume mood row could push all
+  // themes and entities out of the result set.
+  const byType: Record<string, typeof rows> = { mood: [], theme: [], entity: [] };
+  for (const r of rows) {
+    const arr = byType[r.signal_type];
+    if (!arr) continue;
+    if (arr.length < limitPerType) arr.push(r);
+  }
+  // Stable order: mood → theme → entity (so callers get consistent results)
+  const out: Row[] = [];
+  for (const t of ["mood", "theme", "entity"]) {
+    out.push(...byType[t]);
+  }
+  return out.map((r) => ({
     id: r.id,
     year: r.year,
     region: r.region,
