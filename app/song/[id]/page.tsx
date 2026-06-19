@@ -465,7 +465,7 @@ export default async function SongPage({ params }: PageProps) {
                     text: ev.value,
                     source: ev.source,
                     confidence: ev.confidence,
-                    matchedTerms: [],
+                    matchedTerms: ev.evidenceType === "matched_term" ? [ev.value] : [],
                   }));
                   return (
                   <li key={e.event_id} className="p-3 text-xs">
@@ -492,7 +492,9 @@ export default async function SongPage({ params }: PageProps) {
                           `Confidence ${(e.confidence * 100).toFixed(0)}%.`,
                         ]}
                         confidence={e.confidence}
-                        provenanceSources={e.evidence_sources ? ["billboard", ...e.evidence_sources.split(",")] : Array.from(eventEvidenceSources)}
+                        provenanceSources={e.evidence_sources
+                          ? ["billboard", ...e.evidence_sources.split(",").map((s) => s.trim()).filter(Boolean)]
+                          : Array.from(eventEvidenceSources)}
                         evidenceRows={evidenceRows}
                         evidencePreviewTitle="Representative evidence"
                         caveat={e.evidence_count > 0

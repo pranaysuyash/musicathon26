@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { ArrowRight, Compass, FileSearch, Globe } from "lucide-react";
-import { getAllEvents, getAllYears } from "@/lib/db/queries";
+import { getAllEvents, getAllYears, getEraOverview } from "@/lib/db/queries";
 import { initDb } from "@/lib/db";
 import { StoryJourney } from "@/components/story/story-journey";
 import { Pill } from "@/components/ui/primitives";
@@ -40,6 +40,8 @@ export default function Home({
   const events = getAllEvents();
   const yearCounts = getAllYears("US");
   const totalSongs = yearCounts.reduce((a, b) => a + b.songCount, 0);
+  const eraOverview = getEraOverview("US");
+  const erasWithSongs = eraOverview.filter((e) => e.songCount > 0);
 
   const discoveryRoutes = [
     {
@@ -52,9 +54,9 @@ export default function Home({
       meta: ["song-led", "signal-first", "event-confirmed"],
       accent: "from-signal-500/20 via-signal-500/10 to-transparent",
     },
-      {
-        eyebrow: "Route 02",
-        title: "Jump from a song into the evidence trail",
+    {
+      eyebrow: "Route 02",
+      title: "Jump from a song into the evidence trail",
       description:
         "Go from a track into the graph, then inspect the edge proof line by line instead of trusting a summary card.",
       href: buildLangPath("/graph", locale, {
@@ -319,8 +321,15 @@ export default function Home({
       <section className="mt-8 rounded-[2rem] border border-ink-800 bg-ink-900/55 p-5 lg:p-6">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.26em] text-ink-500">Year runway</p>
-            <h2 className="h-display mt-2 text-2xl md:text-3xl">A horizontal timeline instead of a wall of tiles</h2>
+            <p className="text-xs uppercase tracking-[0.26em] text-ink-500">Era mosaic</p>
+            <h2 className="h-display mt-2 text-2xl md:text-3xl">
+              {erasWithSongs.length} cultural eras across 64 years, not a wall of year tiles
+            </h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-ink-400">
+              Each era card summarizes its song count, top mood, top theme, top named
+              entity, and event coverage so you can pick a starting point by feel instead
+              of scrolling through identical year tiles.
+            </p>
           </div>
           <Link
             href={buildLangPath("/scrub", locale)}
@@ -331,23 +340,55 @@ export default function Home({
           </Link>
         </div>
 
-        <div className="mt-5 flex gap-3 overflow-x-auto pb-2 pr-2 scrollbar-thin">
-          {yearCounts.map((year) => (
+        <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {erasWithSongs.map((era) => (
             <Link
-              key={year.year}
-              href={buildLangPath(`/year/${year.year}`, locale)}
-              className="group min-w-[11rem] flex-1 rounded-[1.5rem] border border-ink-800 bg-ink-950/60 p-4 transition hover:-translate-y-0.5 hover:border-signal-400/40"
+              key={era.eraId}
+              href={buildLangPath(`/lens/${era.eraStart}`, locale)}
+              className="group flex flex-col rounded-[1.5rem] border border-ink-800 bg-ink-950/60 p-5 transition hover:-translate-y-0.5 hover:border-signal-400/40"
             >
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-2xl font-semibold tracking-tight">{year.year}</span>
-                <span className="text-xs uppercase tracking-[0.22em] text-ink-500">year</span>
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-lg font-semibold tracking-tight text-ink-50">
+                  {era.eraLabel}
+                </span>
+                <span className="text-xs uppercase tracking-[0.22em] text-ink-500">
+                  {era.eraStart}–{era.eraEnd}
+                </span>
               </div>
-              <p className="mt-3 text-sm text-ink-400">{year.songCount} songs in focus</p>
-              <div className="mt-4 h-2 overflow-hidden rounded-full bg-ink-800">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-signal-500 via-echo-500 to-strength-high transition-all duration-300 group-hover:opacity-100"
-                  style={{ width: "100%" }}
-                />
+              <p className="mt-2 text-xs uppercase tracking-[0.22em] text-ink-500">
+                {era.comparability} comparability
+              </p>
+              <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
+                <div>
+                  <p className="text-ink-500">Songs</p>
+                  <p className="mt-0.5 text-base font-semibold text-ink-100">{era.songCount}</p>
+                </div>
+                <div>
+                  <p className="text-ink-500">Events</p>
+                  <p className="mt-0.5 text-base font-semibold text-ink-100">{era.eventCount}</p>
+                </div>
+                <div>
+                  <p className="text-ink-500">Top mood</p>
+                  <p className="mt-0.5 text-sm font-medium text-ink-200">
+                    {era.topMood ?? "no signal yet"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-ink-500">Top theme</p>
+                  <p className="mt-0.5 text-sm font-medium text-ink-200">
+                    {era.topTheme ?? "no signal yet"}
+                  </p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-ink-500">Top entity</p>
+                  <p className="mt-0.5 text-sm font-medium text-ink-200">
+                    {era.topEntity ?? "no signal yet"}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 inline-flex items-center gap-2 text-xs font-medium text-signal-200 transition group-hover:text-signal-100">
+                Open {era.eraStart}
+                <ArrowRight className="h-3.5 w-3.5" />
               </div>
             </Link>
           ))}

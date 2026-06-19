@@ -1,17 +1,77 @@
-// Year-level insight: aggregated themes/moods/events, with optional ElevenLabs
-// narration as a single TTS moment.
-
 import { NextResponse } from "next/server";
 import { initDb } from "@/lib/db";
 import { getYearThemes, getYearMoods, REGION_LABELS } from "@/lib/db/queries";
 import { all } from "@/lib/db/sql";
 import { buildInsightNarration, synthesizeSpeech } from "@/lib/api/elevenlabs";
-import { access, mkdir, writeFile } from "node:fs/promises";
+import { access, readFile, writeFile, mkdir } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 
 export const dynamic = "force-dynamic";
 
 interface TopEvent { event_id: string; name: string; song_count: number }
+interface InsightCacheManifest {
+  textSignature: string;
+  textHash: string;
+  generatedAt: string;
+}
+
+const INSIGHT_CACHE_DIR = join(process.cwd(), "data", "exports", "insights");
+
+function buildInsightSignature(args: {
+  year: number;
+  region: string;
+  topThemes: { theme: string; avgScore: number }[];
+  topMoods: { mood: string; avgScore: number }[];
+  topEvent?: { name: string; songCount: number };
+}): string {
+  const payload = {
+    year: args.year,
+    region: args.region,
+    themes: args.topThemes.slice(0, 3).map((theme) => theme.theme.replace(/_/g, " ").trim().toLowerCase()),
+    moods: args.topMoods.slice(0, 2).map((mood) => mood.mood.trim().toLowerCase()),
+    event: args.topEvent ? `${args.topEvent.name}|${args.topEvent.songCount}` : "",
+  };
+  return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+}
+
+function buildInsightTextHash(text: string): string {
+  return createHash("sha256").update(text).digest("hex");
+}
+
+function buildCacheManifestPath(year: number, region: string) {
+  const base = `insight-${year}-${region}`;
+  return {
+    audioPath: join(INSIGHT_CACHE_DIR, `${base}.mp3`),
+    metaPath: join(INSIGHT_CACHE_DIR, `${base}.json`),
+  };
+}
+
+async function readManifest(path: string): Promise<InsightCacheManifest | null> {
+  try {
+    const raw = await readFile(path, "utf8");
+    const parsed = JSON.parse(raw) as InsightCacheManifest;
+    if (
+      typeof parsed.textSignature !== "string" ||
+      typeof parsed.textHash !== "string" ||
+      typeof parsed.generatedAt !== "string"
+    ) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+async function hasCachedAudio(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export async function GET(req: Request) {
   initDb();
@@ -34,7 +94,7 @@ export async function GET(req: Request) {
       ORDER BY song_count DESC
       LIMIT 1`,
     year,
-    region
+    region,
   )[0];
 
   const text = buildInsightNarration({
@@ -44,22 +104,44 @@ export async function GET(req: Request) {
     topEvent: topEvent ? { name: topEvent.name, songCount: topEvent.song_count } : undefined,
   });
 
-  const audioPath = join(process.cwd(), "data", "exports", "insights", `insight-${year}-${region}.mp3`);
-  let audioUrl: string | null = null;
-  try {
-    await access(audioPath);
-    audioUrl = `/api/insight/audio?year=${year}&region=${encodeURIComponent(region)}`;
-  } catch {
-    if (process.env.ELEVENLABS_API_KEY) {
-      try {
-        const buf = await synthesizeSpeech(text);
-        await mkdir(join(process.cwd(), "data", "exports", "insights"), { recursive: true });
-        await writeFile(audioPath, buf);
-        audioUrl = `/api/insight/audio?year=${year}&region=${encodeURIComponent(region)}`;
-      } catch (err) {
-        console.warn("ElevenLabs synthesis failed:", (err as Error).message);
-      }
+  const textSignature = buildInsightSignature({
+    year,
+    region,
+    topThemes: themes.map((t) => ({ theme: t.theme, avgScore: t.avgScore })),
+    topMoods: moods.map((m) => ({ mood: m.mood, avgScore: m.avgScore })),
+    topEvent: topEvent ? { name: topEvent.name, songCount: topEvent.song_count } : undefined,
+  });
+
+  const { audioPath, metaPath } = buildCacheManifestPath(year, region);
+  const cachedManifest = await readManifest(metaPath);
+  const currentAudioExists = await hasCachedAudio(audioPath);
+  const shouldGenerate = !currentAudioExists || !cachedManifest || cachedManifest.textSignature !== textSignature;
+
+  if (shouldGenerate && process.env.ELEVENLABS_API_KEY) {
+    try {
+      const buf = await synthesizeSpeech(text);
+      await mkdir(INSIGHT_CACHE_DIR, { recursive: true });
+      await writeFile(audioPath, buf);
+      await writeFile(
+        metaPath,
+        JSON.stringify(
+          {
+            textSignature,
+            textHash: buildInsightTextHash(text),
+            generatedAt: new Date().toISOString(),
+          },
+          null,
+          2,
+        ),
+      );
+    } catch (err) {
+      console.warn("ElevenLabs synthesis failed:", (err as Error).message);
     }
+  }
+
+  let audioUrl: string | null = null;
+  if (await hasCachedAudio(audioPath)) {
+    audioUrl = `/api/insight/audio?year=${year}&region=${encodeURIComponent(region)}`;
   }
 
   return NextResponse.json({

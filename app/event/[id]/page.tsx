@@ -98,6 +98,7 @@ export default function EventPage({ params, searchParams }: PageProps) {
           <Pill variant="echo">{t(locale, "event.title")}</Pill>
           <Pill variant="mute">{event.category}</Pill>
           <Pill variant="mute">{event.startDate} → {event.endDate ?? "present"}</Pill>
+          <Pill variant="warn">verification layer</Pill>
           {event.regions.length > 0 ? event.regions.map((r) => (
             <Pill key={r} variant="mute">{REGION_LABELS[r] ?? r}</Pill>
           )) : null}
@@ -105,7 +106,11 @@ export default function EventPage({ params, searchParams }: PageProps) {
         <h1 className="h-display mt-4 text-4xl font-semibold tracking-tight md:text-5xl text-balance">
           {event.name}
         </h1>
-        <p className="mt-3 max-w-2xl text-ink-300 text-pretty">{event.description}</p>
+        <p className="mt-3 max-w-2xl text-ink-300 text-pretty">
+          {event.description}
+          {" "}
+          This page checks whether songs support this candidate context, not whether the context should be assumed upfront.
+        </p>
         <div className="mt-5 flex flex-wrap gap-2">
           {event.relatedThemes.map((t) => (
             <Link
@@ -145,7 +150,7 @@ export default function EventPage({ params, searchParams }: PageProps) {
 
       <section className="mb-10">
         <SectionTitle subtitle="Sorted by composite link strength. Click for evidence.">
-          Songs connected to this event ({linked.length})
+          Songs used to verify this context ({linked.length})
         </SectionTitle>
         <ul className="card divide-y divide-ink-800/60">
           {linked.length === 0 ? (
@@ -183,12 +188,12 @@ export default function EventPage({ params, searchParams }: PageProps) {
                     reasons={[
                       row.edge.explanation
                         ? row.edge.explanation
-                        : "This link is inferred from event overlap and lyric/signal alignment.",
+                        : "This link is inferred from temporal overlap and lyric/signal alignment as verification evidence.",
                       `${row.edge.edgeType.replace(/_/g, " ")} with ${(row.edge.weight * 100).toFixed(0)}% link weight.`,
                       `Confidence ${(row.edge.confidence * 100).toFixed(0)}%.`,
                     ]}
                     confidence={row.edge.confidence}
-                    provenanceSources={[row.edge.sourceApi, ...row.evidence.map((e) => e.source)]}
+                    provenanceSources={Array.from(new Set([row.edge.sourceApi, ...row.evidence.map((e) => e.source)]))}
                     evidenceRows={row.evidence.map((e) => ({
                       id: e.id,
                       title: e.evidenceType.replace(/_/g, " "),
@@ -201,7 +206,7 @@ export default function EventPage({ params, searchParams }: PageProps) {
                     inferenceType={row.edge.inferenceType}
                     caveat={row.evidence.length > 0
                       ? "Direct lyric snippets can be seen in each evidence row and matched terms are highlighted when present."
-                      : "This edge has no expanded evidence rows yet; connection is graph-derived and source-backed."}
+                      : "This edge has no expanded evidence rows yet; the verification remains graph-derived and source-backed."}
                   />
                 </div>
               </li>

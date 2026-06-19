@@ -21,4 +21,5 @@
 ## Notes
 
 - The home page now carries the “start with 2020” narrative and the “signal seismograph” preview above the fold.
-- The globe page still uses a data-heavy region matrix; that remains the clearest next place to bring the same editorial treatment.
+- The globe surface now has a real cultural-weather prototype path: `react-globe.gl` first, 2D fallback second, and a docs-backed decision record for the long-term choice.
+- The product thesis is now phrased as song-led anomaly detection plus candidate-context verification, so event pages read as hypothesis checks instead of starting assumptions.

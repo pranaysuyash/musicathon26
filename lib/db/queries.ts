@@ -2157,3 +2157,108 @@ export function getSignalYearDistributions(signalType: string, region: string = 
   }
   return map;
 }
+
+export interface EraOverviewRow {
+  eraId: ChartEra["id"];
+  eraLabel: string;
+  eraStart: number;
+  eraEnd: number;
+  comparability: ChartEra["comparability"];
+  songCount: number;
+  yearCount: number;
+  yearSpan: number;
+  topMood: string | null;
+  topTheme: string | null;
+  topEntity: string | null;
+  eventCount: number;
+  evidenceDensity: number; // evidence rows per song
+}
+
+export function getEraOverview(region: string = "US"): EraOverviewRow[] {
+  // Aggregate songs, events, and signals per chart era so the home
+  // page can present a small mosaic (5 eras) instead of a wall of
+  // 64 identical year tiles. Per Decision 0030, the home page
+  // surfaces the eras as editorial mosaics — each era card shows
+  // its song count, top signal, top entity, and event coverage so
+  // the user can pick a starting point instead of scrolling.
+  const rows: EraOverviewRow[] = [];
+  for (const era of CHART_ERAS) {
+    const cnt = (get<{ c: number }>(
+      `SELECT COUNT(*) AS c FROM songs s WHERE s.region = ? AND s.year BETWEEN ? AND ?`,
+      region,
+      era.start,
+      era.end,
+    )?.c) ?? 0;
+    const years = all<{ y: number }>(
+      `SELECT DISTINCT s.year AS y FROM songs s WHERE s.region = ? AND s.year BETWEEN ? AND ? ORDER BY s.year`,
+      region, era.start, era.end,
+    );
+    // Top mood: pick the mood signal with the highest song_count
+    // for the era's year range.
+    const topMood = get<{ signal: string; c: number }>(
+      `SELECT ysp.signal, SUM(ysp.song_count) AS c
+         FROM year_signal_profiles ysp
+         WHERE ysp.region = ? AND ysp.signal_type = 'mood'
+           AND ysp.year BETWEEN ? AND ?
+         GROUP BY ysp.signal
+         ORDER BY c DESC LIMIT 1`,
+      region, era.start, era.end,
+    );
+    const topTheme = get<{ signal: string; c: number }>(
+      `SELECT ysp.signal, SUM(ysp.song_count) AS c
+         FROM year_signal_profiles ysp
+         WHERE ysp.region = ? AND ysp.signal_type = 'theme'
+           AND ysp.year BETWEEN ? AND ?
+         GROUP BY ysp.signal
+         ORDER BY c DESC LIMIT 1`,
+      region, era.start, era.end,
+    );
+    // Top entity: most-mentioned entity in songs whose year falls
+    // in the era window.
+    const topEntity = get<{ canonical_name: string; c: number }>(
+      `SELECT e.canonical_name, COUNT(*) AS c
+         FROM entity_mentions em
+         JOIN songs s ON s.id = REPLACE(em.song_id, 'versesignal:s:', '')
+                       OR s.id = em.song_id
+                       OR em.song_id LIKE '%' || s.id
+         JOIN entities e ON e.id = em.entity_id
+         WHERE s.region = ? AND s.year BETWEEN ? AND ?
+         GROUP BY e.id
+         ORDER BY c DESC LIMIT 1`,
+      region, era.start, era.end,
+    );
+    // Event count: events whose start_date overlaps the era.
+    const eventCount = (get<{ c: number }>(
+      `SELECT COUNT(DISTINCT e.id) AS c
+         FROM events e
+         WHERE CAST(SUBSTR(e.start_date, 1, 4) AS INTEGER) BETWEEN ? AND ?`,
+      era.start, era.end,
+    )?.c) ?? 0;
+    const evidenceDensity = cnt === 0
+      ? 0
+      : (get<{ c: number }>(
+          `SELECT COUNT(*) AS c
+             FROM graph_edges ge
+             JOIN songs s ON s.id LIKE '%' || REPLACE(ge.src_id, 'versesignal:n:song:versesignal:', '') || '%'
+                          AND ge.src_id LIKE 'versesignal:n:song:%'
+             WHERE s.region = ? AND s.year BETWEEN ? AND ?`,
+          region, era.start, era.end,
+        )?.c ?? 0) / cnt;
+    rows.push({
+      eraId: era.id,
+      eraLabel: era.label,
+      eraStart: era.start,
+      eraEnd: era.end,
+      comparability: era.comparability,
+      songCount: cnt,
+      yearCount: years.length,
+      yearSpan: era.end - era.start + 1,
+      topMood: topMood?.signal ?? null,
+      topTheme: topTheme?.signal ?? null,
+      topEntity: topEntity?.canonical_name ?? null,
+      eventCount,
+      evidenceDensity: Number(evidenceDensity.toFixed(2)),
+    });
+  }
+  return rows;
+}

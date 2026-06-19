@@ -31,7 +31,7 @@ export function ProvenanceStrip({
   className?: string;
 }) {
   const rows = evidenceSources(sources);
-  const partnerCount = rows.filter((r) => r.partner === "partner").length;
+  const partnerRows = rows.filter((r) => r.partner === "partner");
   return (
     <section className={`space-y-1 ${className}`}>
       <h4 className="text-xs font-semibold uppercase tracking-wider text-ink-400">{title}</h4>
@@ -46,7 +46,9 @@ export function ProvenanceStrip({
       )}
       <p className="text-[10px] text-ink-500">
         Evidence sources: {rows.length}.
-        {partnerCount > 0 ? ` ${partnerCount} partner source${partnerCount === 1 ? "" : "s"}.` : ""}
+        {partnerRows.length > 0
+          ? ` Partner APIs in this chain: ${partnerRows.map((p) => p.name).join(" · ")}.`
+          : " No partner API was used for this evidence bundle."}
       </p>
     </section>
   );

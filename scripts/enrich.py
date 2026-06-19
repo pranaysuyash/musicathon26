@@ -6,7 +6,7 @@ Layers (in order):
   1. Load songs + lyrics from SQLite.
   2. Embeddings (sentence-transformers primary; falls back to bag-of-words
      cosine if the model can't load).
-  3. Custom NER (GLiNER if available, else spaCy en_core_web_sm).
+  3. Custom NER routing (GLiNER/custom MusicNER if configured, else spaCy en_core_web_sm).
   4. Theme scoring (lexicon + cosine to theme seed embeddings).
   5. Mood scoring (lexicon-derived proxy until Cyanite is wired).
   6. Event linking (temporal window + keyword + embedding overlap).
@@ -517,6 +517,7 @@ def run_ner(p: Pipeline, lyrics: str) -> list[dict]:
         source = "gliner" if backend.provider == "gliner" else "musicner"
         gliner_model = backend.model
         from lib.nlp.ner_labels import NER_LABELS, get_threshold, DEFAULT_NER_THRESHOLD  # type: ignore
+        from lib.nlp.stoplist import STOPWORDS, MIN_LENGTH_FOR_GLINER  # type: ignore
         try:
             for line in lines:
                 # Per-label thresholds; use the highest per-label threshold
@@ -527,8 +528,18 @@ def run_ner(p: Pipeline, lyrics: str) -> list[dict]:
                     score = float(ent.get("score", 0.7))
                     if score < get_threshold(label):
                         continue
+                    surface = ent.get("text", "").strip()
+                    # Per motto_v3 §0.11 (Customer-Facing Claims), only
+                    # entities a human would recognize as named should
+                    # reach the UI. Drop pronouns, articles, common
+                    # interjections, generic nouns, exclamations, and
+                    # anything shorter than MIN_LENGTH_FOR_GLINER chars.
+                    if len(surface) < MIN_LENGTH_FOR_GLINER:
+                        continue
+                    if surface.lower() in STOPWORDS:
+                        continue
                     out.append({
-                        "text": ent.get("text", ""),
+                        "text": surface,
                         "label": label,
                         "start": ent.get("start", 0),
                         "end": ent.get("end", 0),
@@ -540,11 +551,15 @@ def run_ner(p: Pipeline, lyrics: str) -> list[dict]:
         except Exception as err:  # noqa: BLE001
             print(f"  · GLiNER predict failed: {err}", file=sys.stderr)
     elif p.spacy_nlp is not None:
+        from lib.nlp.stoplist import is_bogus_surface  # type: ignore
         for line in lines:
             doc = p.spacy_nlp(line)
             for ent in doc.ents:
+                surface = ent.text.strip()
+                if is_bogus_surface(surface, source="spacy"):
+                    continue
                 out.append({
-                    "text": ent.text,
+                    "text": surface,
                     "label": ent.label_.lower(),
                     "start": ent.start_char,
                     "end": ent.end_char,
@@ -656,15 +671,58 @@ def link_song_to_event(
     else:
         return None
 
-    # --- Thematic gate ---
-    matched = []
-    for theme, (_score, terms) in lexicon_hits.items():
-        if theme in related_themes:
-            matched.extend(terms)
-    if not matched:
+    # --- Thematic gate (SPECIFIC keyword evidence required) ---
+    #
+    # Per Decision 0030 (song-led event confirmation), a song-event
+    # link must rest on SPECIFIC terms from the event's keyword list
+    # — not on shared top-level themes. Why: every pop song has
+    # "love" or "home"; matching on shared theme produced 100+ bogus
+    # COVID connections that the user can see. The new gate
+    # requires:
+    #   - At least MIN_KEYWORD_HITS distinct event keywords appear in
+    #     the song's lyrics (case-insensitive whole-word match).
+    #   - At least MIN_DISTINCT_KEYWORDS distinct event keywords.
+    # Otherwise we drop the link rather than show noise as evidence.
+    MIN_KEYWORD_HITS = 2
+    MIN_DISTINCT_KEYWORDS = 2
+
+    # Pull the song's lyrics once for direct keyword presence.
+    song_text = ""
+    for row in conn.execute(
+        "SELECT text FROM lyric_lines WHERE song_id = ? ORDER BY line_index LIMIT 600",
+        (song_id,),
+    ).fetchall():
+        song_text += "\n" + (row["text"] or "")
+    song_text_l = song_text.lower()
+
+    import re as _re
+    keywords_found: set[str] = set()
+    for kw in keywords:
+        kwl = kw.lower().strip()
+        if not kwl:
+            continue
+        # Whole-word match so "ai" doesn't match "wait"; allow
+        # multi-word phrases and phrases with non-word characters
+        # (e.g., "social distance").
+        pattern = _re.compile(r"(?<![A-Za-z0-9])" + _re.escape(kwl) + r"(?![A-Za-z0-9])")
+        if pattern.search(song_text_l):
+            keywords_found.add(kwl)
+
+    if len(keywords_found) < MIN_DISTINCT_KEYWORDS:
+        return None
+    if len(keywords_found) < MIN_KEYWORD_HITS:
         return None
 
-    # Theme alignment score
+    # The "matched terms" surfaced as evidence are the keywords we
+    # actually found — these are the only legitimate bridge between
+    # the song and the event. Theme overlap is used only to set the
+    # composite weight via theme_score below, not to inflate matched
+    # terms with theme vocabulary.
+    matched = sorted(keywords_found)
+    seen = set(matched)
+
+    # Theme alignment score from lexicon (kept for confidence +
+    # composite weight).
     theme_score = 0.0
     for theme in related_themes:
         if theme in lexicon_hits:
@@ -676,23 +734,35 @@ def link_song_to_event(
     if embedder is not None and song_vec is not None and event_vec is not None:
         emb_sim = max(0.0, cosine(song_vec, event_vec))
 
-    # --- Composite strength: temporal acts as a multiplier ---
-    raw = 0.5 * min(1.0, len(set(matched)) / 8) + 0.3 * min(1.0, theme_score / 5) + 0.2 * emb_sim
+    # --- Composite strength: keyword-specificity is the primary
+    # signal; theme overlap is a secondary modifier; temporal scope
+    # scales the whole thing. Per Decision 0030, the user sees this
+    # as evidence — so we don't inflate matched-term count beyond
+    # the keywords themselves.
+    kw_count_norm = min(1.0, len(keywords_found) / 4)
+    theme_norm = min(1.0, theme_score / 5)
+    emb_norm = emb_sim  # already 0..1
+    raw = 0.6 * kw_count_norm + 0.25 * theme_norm + 0.15 * emb_norm
     strength = round(min(1.0, raw * temporal_score), 4)
     if strength < 0.2:
         return None
 
-    # --- Evidence lines (lyric lines containing matched terms) ---
+    # --- Evidence lines (lyric lines that contain any matched keyword,
+    # using whole-word match so a keyword like "ai" doesn't pull in
+    # unrelated lines containing "wait" or "main") ---
+    import re as _re2
     evidence_lines: list[dict] = []
+    kw_patterns = [
+        _re2.compile(r"(?<![A-Za-z0-9])" + _re2.escape(t) + r"(?![A-Za-z0-9])")
+        for t in keywords_found
+    ]
     for row in conn.execute(
         "SELECT line_index, text FROM lyric_lines WHERE song_id = ? ORDER BY line_index LIMIT 600",
         (song_id,),
     ).fetchall():
-        text_l = row["text"].lower()
-        for term in set(matched):
-            if term in text_l:
-                evidence_lines.append({"line_index": row["line_index"], "line_text": row["text"]})
-                break
+        line_l = (row["text"] or "").lower()
+        if any(p.search(line_l) for p in kw_patterns):
+            evidence_lines.append({"line_index": row["line_index"], "line_text": row["text"]})
     evidence_lines = evidence_lines[:5]
 
     # Link type — explicit, evidence-graded
@@ -703,7 +773,7 @@ def link_song_to_event(
         if strength > 0.6:
             link_type = "emotional_shadow"
 
-    return strength, sorted(set(matched)), link_type, evidence_lines, bucket, song_year, start_year
+    return strength, matched, link_type, evidence_lines, bucket, song_year, start_year
 
 
 def build_event_embeddings(p: Pipeline, events: list[sqlite3.Row]) -> dict[str, list[float]]:
@@ -884,6 +954,12 @@ def main() -> int:
                 if is_gaz
                 else f"{ent['text']} ({ent['label']})"
             )
+            mention_version = ent.get("model_version", model_version)
+            source_api = mention_version
+            if ent["source"] in {"gliner", "musicner"}:
+                labels_version = ent.get("labels_version", "unknown")
+                if labels_version:
+                    source_api = f"{mention_version}+labels-{labels_version}"
             conn.execute(
                 """
                 INSERT OR REPLACE INTO graph_edges
@@ -899,8 +975,8 @@ def main() -> int:
                     float(ent["confidence"]),
                     json.dumps([ev_id]),
                     ent["source"],
-                    f"urchade/gliner_medium-v2.1+labels-{ent.get('labels_version', 'unknown')}"
-                    if ent["source"] == "gliner" else model_version,
+                    source_api,
+                    mention_version,
                     "named_entity_match",
                     matched_terms_json,
                     f"NER detected '{ent['text']}' ({ent['label']}) in lyrics."

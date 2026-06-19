@@ -14,7 +14,7 @@ export default defineConfig({
     exclude: ["node_modules/**", ".next/**", ".venv/**"],
     environment: "node",
     globals: false,
-    testTimeout: 5000,
+    testTimeout: 30000,
     reporters: process.env.CI ? ["default"] : ["default"],
     pool: "forks",
   },

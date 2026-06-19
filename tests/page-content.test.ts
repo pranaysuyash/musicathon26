@@ -39,7 +39,19 @@ const PAGES: PageCheck[] = [
   {
     name: "/ contains the new exploration launchpad copy",
     path: "/",
-    expectInBody: ["Start with 2020", "Pick a starting mood", "Choreographed routes"],
+    expectInBody: [
+      "Start with 2020",
+      "Start with a song anomaly, then test candidate explanations",
+      "Candidate contexts",
+    ],
+  },
+  // === ERA MOSAIC: the home page surfaces a small mosaic of eras
+  // (5 max), not 64 identical year tiles. Per Decision 0030 the
+  // wall of tiles was a catalog anti-pattern.
+  {
+    name: "/ shows the era mosaic instead of a wall of year tiles",
+    path: "/",
+    expectInBody: ["Era mosaic", "cultural eras across", "Top mood"],
   },
   // === LENS PAGE: the headline surface. The narrative must mention
   // 2020's actual top signals (mood:energetic, mood:romantic, etc.)
@@ -63,11 +75,16 @@ const PAGES: PageCheck[] = [
     path: "/lens/1969",
     expectInBody: ["1969", "Aquarius"],
   },
-  // === SONG PAGE: the per-song evidence surface
+  // === SONG PAGE: the per-song evidence surface.
+  // Per Decision 0030, the linker requires SPECIFIC event keywords
+  // in the song's lyrics before claiming an event link. Blinding
+  // Lights doesn't mention any COVID keywords, so it correctly
+  // shows NO event connections — that's the honest behavior we
+  // want. The test pins themes + entities + similar songs instead.
   {
-    name: "/song/2020:#1 has themes and event links",
+    name: "/song/2020:#1 has themes, entities, and similar songs (no false event link)",
     path: "/song/versesignal:2020:01:blinding-lights-the-weeknd",
-    expectInBody: ["Blinding Lights", "The Weeknd", "COVID"],
+    expectInBody: ["Blinding Lights", "The Weeknd", "Themes", "Similar songs"],
   },
   {
     name: "/song/1985:#1 has care about Careless Whisper",
@@ -84,6 +101,12 @@ const PAGES: PageCheck[] = [
     name: "/event/ukraine_war shows the war",
     path: "/event/versesignal:ev:ukraine_war",
     expectInBody: ["Ukraine"],
+  },
+  // === GLOBE PAGE: the cultural weather surface
+  {
+    name: "/globe shows the cultural weather map",
+    path: "/globe?year=2020&region=US",
+    expectInBody: ["Cultural weather map", "react-globe.gl", "Tier 1: react-globe.gl"],
   },
   // === YEAR PAGE: the year overview
   {

@@ -84,9 +84,19 @@ def test_cultural_posture_score_in_range(db):
 
 
 def test_cultural_posture_has_classifications(db):
-    """At least 100 (song, event) pairs classified."""
+    """At least one (song, event) pair is classified, and the
+    classifications reflect the tightened linker (Decision 0030):
+    the linker requires SPECIFIC event keywords in song lyrics, so
+    most chart songs no longer link to any curated event. A small
+    but non-zero number of classifications is the honest baseline.
+    """
     n = db.execute("SELECT COUNT(*) AS c FROM cultural_posture").fetchone()["c"]
-    assert n > 100, f"Only {n} cultural_posture rows; expected > 100"
+    # Per Decision 0030, the linker produces a small, honest number
+    # of song-event links (e.g., 7 for the current 411-song corpus).
+    # We assert >0 to confirm the classifier still runs, and not
+    # >100 to avoid incentivizing the inflated linker that the old
+    # test was written against.
+    assert n > 0, f"Only {n} cultural_posture rows; expected >0"
 
 
 def test_cultural_posture_diverse_distribution(db):

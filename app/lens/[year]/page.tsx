@@ -31,7 +31,6 @@ import { SignalYearDistribution } from "@/components/lens/signal-year-distributi
 import { YearInsightPlayer } from "@/components/lens/year-insight-player";
 import { t, resolveLocale, localePairs, type Locale } from "@/lib/i18n/strings";
 import type { EvidencePreviewItem } from "@/components/evidence/evidence-preview";
-import type { Song } from "@/lib/types";
 
 function buildLangPath(path: string, locale: Locale) {
   const hasQuery = path.includes("?");
@@ -233,13 +232,7 @@ export default async function LensPage({
                     evidencePreviewTitle="Representative songs"
                   />
                 </div>
-              ) : (
-                <EvidencePreview
-                  title="Evidence"
-                  items={[]}
-                  maxItems={1}
-                />
-              )}
+              ) : null}
               {s.evidenceSongIds.length > 0 ? (
                 <p className="mt-1.5 text-[10px] text-ink-500">
                   Songs cited: {s.evidenceSongIds.slice(0, 3).map((id) => id.split(":").pop()?.split("-").slice(0, 2).join(" ")).filter(Boolean).join(" · ")}
@@ -268,14 +261,14 @@ export default async function LensPage({
         </div>
       </section>
 
-      {/* Events for the year */}
+      {/* Candidate contexts for the year */}
       {events.length > 0 ? (
         <section className="mb-10">
           <h2 className="text-xs font-semibold uppercase tracking-wider text-ink-500">
-            What was happening in the world
+            Candidate contexts to verify
           </h2>
           <p className="mt-1 mb-4 text-sm text-ink-400">
-            {events.length} curated world event(s) with a temporal overlap to {year}.
+            {events.length} candidate explanation(s) with a temporal overlap to {year}. These are hypotheses to test, not proof by themselves.
           </p>
           <ul className="space-y-2">
             {events.map((ev) => {
@@ -302,7 +295,7 @@ export default async function LensPage({
                 {corr.length > 0 ? (
                   <div className="mt-3 border-t border-ink-800 pt-3">
                     <p className="text-[10px] uppercase tracking-wider text-ink-500">
-                      What shifted during this event (vs prior 3-yr baseline)
+                      What shifted during this candidate context (vs prior 3-yr baseline)
                     </p>
                     <ul className="mt-1.5 space-y-0.5">
                       {corr.slice(0, 5).map((c) => {
@@ -362,6 +355,64 @@ export default async function LensPage({
                 </span>
                 <Pill variant="echo">{e.dominantPosture}</Pill>
               </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {/* Candidate contexts (P1.3) driven by generated context table */}
+      {contexts.length > 0 ? (
+        <section className="mb-10">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-ink-500">
+            Candidate contexts
+          </h2>
+          <p className="mt-1 mb-4 text-sm text-ink-400">
+            Auto-generated context hypotheses with supporting signals and posture summaries.
+          </p>
+          <div className="space-y-3">
+            {contexts.map((context) => (
+              <article key={context.id} className="card p-4">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <h3 className="text-sm font-semibold text-ink-100">
+                    {context.explanationShort ?? `Context ${context.id.slice(0, 8)}...`}
+                  </h3>
+                  <span className="text-xs text-ink-500">
+                    {(context.confidence * 100).toFixed(0)}% confidence
+                  </span>
+                </div>
+                <p className="mt-2 text-sm leading-relaxed text-ink-200">{context.explanation}</p>
+                <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-ink-500">
+                  {context.dominantPosture ? (
+                    <Pill variant="echo">{context.dominantPosture}</Pill>
+                  ) : null}
+                  {context.crossYearType ? (
+                    <Pill variant="mute">Cross-year: {context.crossYearType}</Pill>
+                  ) : null}
+                  {context.triggerEventIds && context.triggerEventIds.length > 0 ? (
+                    <Pill variant="signal">Trigger events: {context.triggerEventIds.length}</Pill>
+                  ) : null}
+                </div>
+                {context.comparativeSignals && context.comparativeSignals.length > 0 ? (
+                  <details className="mt-3">
+                    <summary className="cursor-pointer text-xs text-ink-500 hover:text-ink-300">
+                      Show {context.comparativeSignals.length} comparative signal lifts
+                    </summary>
+                    <ul className="mt-2 space-y-1 text-[11px] text-ink-300">
+                      {context.comparativeSignals.map((signal, index) => (
+                        <li key={`${context.id}-${index}`} className="flex items-center justify-between gap-2">
+                          <span>{signal.type}:{signal.signal}</span>
+                          <span className="tabular-nums text-ink-500">
+                            lift {signal.lift != null ? `${signal.lift.toFixed(1)}x` : "n/a"}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                ) : null}
+                <p className="mt-3 text-[10px] text-ink-500">
+                  Evidence payload: {context.evidence}
+                </p>
+              </article>
             ))}
           </div>
         </section>
@@ -660,7 +711,7 @@ function buildTakeaway(
   );
   if (events.length > 0) {
     lines.push(
-      ` The world was experiencing: ${events.map((e) => e.name).join("; ")}.`
+      ` Candidate contexts to test include: ${events.map((e) => e.name).join("; ")}.`
     );
   }
   if (top.length >= 2) {

@@ -4,6 +4,7 @@ import { initDb } from "@/lib/db";
 import { all } from "@/lib/db/sql";
 import { REGION_LABELS, getAllYears, getYearSignals } from "@/lib/db/queries";
 import { Pill } from "@/components/ui/primitives";
+import { CulturalWeatherGlobe, type WeatherRegionPoint } from "@/components/globe/cultural-weather-globe";
 import { t, resolveLocale, localePairs, type Locale } from "@/lib/i18n/strings";
 
 function buildLangPath(path: string, locale: Locale, query?: Record<string, string>) {
@@ -32,26 +33,6 @@ function closestOrFallback(rows: RegionRow[], targetYear: number): RegionRow | n
   const before = rows.filter((r) => r.year < targetYear).at(-1);
   if (before) return before;
   return rows[0] ?? null;
-}
-
-function intensityStyle(value: number, maxValue: number) {
-  if (maxValue <= 0) {
-    return {
-      backgroundColor: "rgba(15, 23, 42, 0.35)",
-      borderColor: "rgba(71, 85, 105, 0.5)",
-    };
-  }
-  const ratio = Math.max(0, Math.min(1, value / maxValue));
-  const alpha = Number((0.18 + ratio * 0.72).toFixed(2));
-  const heat = Math.round(38 + ratio * 40);
-  return {
-    backgroundColor: `rgba(34, 211, 238, ${alpha})`,
-    borderColor: `rgba(56, 189, 248, ${alpha + 0.08})`,
-    backgroundImage: `linear-gradient(120deg, hsla(198, 85%, ${heat}%, ${alpha}) 0%, hsla(262, 85%, ${Math.max(
-      20,
-      heat - 10
-    )}%, ${Math.max(0.2, alpha - 0.05)}) 100%)`,
-  };
 }
 
 interface YearSignal {
@@ -85,14 +66,29 @@ interface RegionRow {
   song_count: number;
 }
 
+const REGION_COORDS: Record<string, { lat: number; lng: number }> = {
+  GLOBAL: { lat: 18, lng: 6 },
+  US: { lat: 39, lng: -98 },
+  IN: { lat: 22, lng: 79 },
+  UK: { lat: 54, lng: -2 },
+  JP: { lat: 36, lng: 138 },
+  KR: { lat: 36, lng: 128 },
+  DE: { lat: 51, lng: 10 },
+  BR: { lat: -10, lng: -55 },
+  NG: { lat: 9, lng: 8 },
+  MX: { lat: 23, lng: -102 },
+  UA: { lat: 49, lng: 32 },
+  RU: { lat: 61, lng: 100 },
+};
+
 export const metadata: Metadata = {
   title: "Cultural weather map",
   description:
-    "A regional view of VerseSignal&apos;s current music-culture intensity, by song volume and top signals.",
+    "An interactive cultural weather surface for VerseSignal's regional music signals, candidate contexts, and uncertainty.",
   openGraph: {
     images: [
       {
-        url: "/api/og?type=globe&title=Cultural%20Weather%20Map&subtitle=Regional+music+culture+intensity+by+era+and+chart+signals",
+        url: "/api/og?type=globe&title=Cultural%20Weather%20Map&subtitle=Song-led+regional+signal+intensity+and+candidate+context+layers",
         width: 1200,
         height: 630,
       },
@@ -103,7 +99,7 @@ export const metadata: Metadata = {
 export default function GlobePage({
   searchParams,
 }: {
-  searchParams: { lang?: string; year?: string };
+  searchParams: { lang?: string; year?: string; region?: string };
 }) {
   initDb();
   const locale = resolveLocale(searchParams.lang);
@@ -111,9 +107,7 @@ export default function GlobePage({
   const fallbackYear = allYears.at(-1)?.year ?? new Date().getFullYear();
   const currentYear = resolveYear(searchParams.year, fallbackYear);
   const yearSet = new Set(allYears.map((r) => r.year));
-  const resolvedYear = yearSet.has(currentYear)
-    ? currentYear
-    : fallbackYear;
+  const resolvedYear = yearSet.has(currentYear) ? currentYear : fallbackYear;
   const yearList = allYears.filter((r) => yearSet.has(r.year)).map((r) => r.year);
 
   const rows = all<RegionRow>(
@@ -135,13 +129,18 @@ export default function GlobePage({
     bucket.push(row);
     return acc;
   }, {});
+
   Object.values(regionRowsByCode).forEach((regionRows) => {
     regionRows.sort((a, b) => b.year - a.year);
   });
 
   const regionCards: RegionCard[] = Object.entries(REGION_LABELS).map(([code, label]) => {
     const regionRows = regionRowsByCode[code] ?? [];
-    const selectedRow = closestOrFallback(regionRows, resolvedYear) ?? { region: code, year: resolvedYear, song_count: 0 };
+    const selectedRow = closestOrFallback(regionRows, resolvedYear) ?? {
+      region: code,
+      year: resolvedYear,
+      song_count: 0,
+    };
     const previousRow = selectedRow
       ? closestOrFallback(
           regionRows.filter((r) => r.year < selectedRow.year),
@@ -154,15 +153,16 @@ export default function GlobePage({
     const songCount = selectedRow?.song_count ?? 0;
     const prevSongCount = previousRow?.song_count ?? 0;
     const eventCount = new Set(
-      eventRows.filter((event) => {
-        const eventRegionsMatch = event.value === code || event.value === "GLOBAL";
-        if (!eventRegionsMatch) return false;
-        if (!resolvedYear) return false;
-        const startYear = Number(String(event.start_date).slice(0, 4));
-        if (!Number.isFinite(startYear)) return false;
-        const endYear = event.end_date ? Number(String(event.end_date).slice(0, 4)) : startYear;
-        return resolvedYear >= startYear && resolvedYear <= (Number.isFinite(endYear) ? endYear : startYear);
-      }).map((r) => r.id)
+      eventRows
+        .filter((event) => {
+          const eventRegionsMatch = event.value === code || event.value === "GLOBAL";
+          if (!eventRegionsMatch) return false;
+          const startYear = Number(String(event.start_date).slice(0, 4));
+          if (!Number.isFinite(startYear)) return false;
+          const endYear = event.end_date ? Number(String(event.end_date).slice(0, 4)) : startYear;
+          return resolvedYear >= startYear && resolvedYear <= (Number.isFinite(endYear) ? endYear : startYear);
+        })
+        .map((r) => r.id)
     ).size;
 
     return {
@@ -173,8 +173,7 @@ export default function GlobePage({
       prevSongCount,
       delta: songCount - prevSongCount,
       eventCount,
-      topTheme:
-        selectedSignals.find((s) => s.signalType === "theme")?.signal ?? null,
+      topTheme: selectedSignals.find((s) => s.signalType === "theme")?.signal ?? null,
       topSignal:
         selectedSignals.length > 0 ? `${selectedSignals[0].signalType}: ${selectedSignals[0].signal}` : null,
     };
@@ -182,23 +181,51 @@ export default function GlobePage({
 
   const hottestFirst = [...regionCards].sort((a, b) => b.songCount - a.songCount);
   const maxSongCount = hottestFirst[0]?.songCount ?? 0;
+  const selectedRegionCode =
+    (searchParams.region && regionCards.some((card) => card.code === searchParams.region)
+      ? searchParams.region
+      : hottestFirst[0]?.code) ?? "GLOBAL";
+  const selectedCard = regionCards.find((card) => card.code === selectedRegionCode) ?? hottestFirst[0] ?? null;
   const currentYearIndex = yearList.indexOf(resolvedYear);
   const prevYear = currentYearIndex > 0 ? yearList[currentYearIndex - 1] : null;
   const nextYear = currentYearIndex >= 0 && currentYearIndex < yearList.length - 1 ? yearList[currentYearIndex + 1] : null;
   const resolvedYearLabel = String(resolvedYear);
-  const yearNavQuery = (year: number) => ({ year: String(year) });
+  const globeQuery: Record<string, string> = {};
+  if (searchParams.year) {
+    globeQuery.year = resolvedYearLabel;
+  }
+  if (searchParams.region) {
+    globeQuery.region = searchParams.region;
+  }
+
+  const weatherPoints: WeatherRegionPoint[] = regionCards.map((item) => {
+    const coords = REGION_COORDS[item.code] ?? REGION_COORDS.GLOBAL;
+    const intensity = maxSongCount > 0 ? item.songCount / maxSongCount : 0;
+    const completeness = Math.min(1, Math.max(0.2, (item.songCount + item.eventCount * 0.5) / 18));
+    return {
+      code: item.code,
+      label: item.label,
+      lat: coords.lat,
+      lng: coords.lng,
+      year: item.latestYear ?? resolvedYear,
+      songCount: item.songCount,
+      prevSongCount: item.prevSongCount,
+      delta: item.delta,
+      eventCount: item.eventCount,
+      topTheme: item.topTheme,
+      topSignal: item.topSignal,
+      intensity,
+      completeness,
+    };
+  });
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-10">
+    <main className="mx-auto max-w-7xl px-6 py-8 lg:px-8 lg:py-10">
       <div className="mb-4 flex flex-wrap gap-2 text-xs">
         {localePairs.map(({ code, key }) => (
           <a
             key={code}
-            href={
-              code === "en"
-                ? `/globe${searchParams.year ? `?year=${resolvedYearLabel}` : ""}`
-                : buildLangPath("/globe", code, { year: resolvedYearLabel })
-            }
+            href={buildLangPath("/globe", code, globeQuery)}
             className={`rounded-full border px-2.5 py-1 transition ${
               locale === code
                 ? "border-signal-300 bg-signal-300/10 text-signal-200"
@@ -210,12 +237,9 @@ export default function GlobePage({
         ))}
       </div>
 
-      <div className="mb-2 flex items-center justify-between gap-2">
-          <Link
-            href={buildLangPath("/", locale)}
-            className="text-xs text-ink-400 hover:text-ink-200"
-          >
-            ← VerseSignal home
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <Link href={buildLangPath("/", locale)} className="text-xs text-ink-400 hover:text-ink-200">
+          ← VerseSignal home
         </Link>
         <div className="flex items-center gap-2 text-xs text-ink-400">
           <Pill variant="signal">{t(locale, "globe.title")}</Pill>
@@ -223,31 +247,83 @@ export default function GlobePage({
         </div>
       </div>
 
-      <h1 className="h-display mt-2 text-4xl font-semibold tracking-tight md:text-6xl">
-        {t(locale, "globe.title")}
-      </h1>
-      <p className="mt-3 max-w-3xl text-sm text-ink-300">
-        {t(locale, "globe.description")}
-      </p>
-      <p className="mt-2 text-xs text-ink-500">
-        Baseline year: {resolvedYear}.
-      </p>
+      <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr] lg:items-end">
+        <div className="max-w-3xl">
+          <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-ink-800 bg-ink-950/55 px-4 py-2 text-[11px] uppercase tracking-[0.26em] text-ink-500">
+            <span>Tier 1: react-globe.gl</span>
+            <span className="text-ink-700">·</span>
+            <span>Tier 2: 2D fallback</span>
+            <span className="text-ink-700">·</span>
+            <span>Tier 3: geospatial overkill</span>
+          </div>
+          <h1 className="h-display mt-5 text-4xl font-semibold tracking-tight text-balance md:text-6xl">
+            {t(locale, "globe.title")}
+          </h1>
+          <p className="mt-4 max-w-2xl text-sm leading-7 text-ink-300 md:text-base">
+            {t(locale, "globe.description")} The surface is meant to feel playable: signal intensity on one axis,
+            data availability on another, and candidate context only when the evidence earns it.
+          </p>
+        </div>
 
-      <section className="mt-6 flex flex-wrap items-center gap-2">
+        <div className="rounded-[1.75rem] border border-ink-800 bg-ink-950/55 p-5">
+          <p className="text-xs uppercase tracking-[0.26em] text-ink-500">Reading guide</p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+            <ReadingChip title="Signal" value="Where songs get louder, stranger, or more concentrated." />
+            <ReadingChip title="Context" value="Candidate explanations that may fit the anomaly." />
+            <ReadingChip title="Uncertainty" value="Where the corpus is thin or the link is speculative." />
+          </div>
+        </div>
+      </section>
+
+      <section className="mt-8">
+        <CulturalWeatherGlobe
+          locale={locale}
+          year={resolvedYear}
+          points={weatherPoints}
+          initialRegionCode={selectedRegionCode}
+        />
+      </section>
+
+      <section className="mt-8 grid gap-4 md:grid-cols-3">
+        <div className="rounded-[1.6rem] border border-ink-800 bg-ink-950/55 p-5">
+          <p className="text-xs uppercase tracking-[0.24em] text-ink-500">Selected slice</p>
+          <h2 className="mt-2 text-xl font-semibold text-ink-100">{selectedCard?.label ?? "Regional slice"}</h2>
+          <p className="mt-2 text-sm leading-6 text-ink-400">
+            {selectedCard ? `${selectedCard.songCount} songs in ${selectedCard.latestYear ?? resolvedYear}.` : "No region selected yet."}
+          </p>
+          <p className="mt-3 text-sm text-ink-300">
+            Top signal: <span className="text-ink-100">{selectedCard?.topSignal ?? "n/a"}</span>
+          </p>
+        </div>
+        <div className="rounded-[1.6rem] border border-ink-800 bg-ink-950/55 p-5">
+          <p className="text-xs uppercase tracking-[0.24em] text-ink-500">What to compare</p>
+          <p className="mt-2 text-sm leading-6 text-ink-300">
+            Compare the hottest region against the least complete one. That contrast keeps the globe honest about
+            when it is seeing a real cultural signal and when it is simply seeing more data.
+          </p>
+        </div>
+        <div className="rounded-[1.6rem] border border-ink-800 bg-ink-950/55 p-5">
+          <p className="text-xs uppercase tracking-[0.24em] text-ink-500">Next move</p>
+          <p className="mt-2 text-sm leading-6 text-ink-300">
+            Open the region lens to test a candidate context or jump to the graph to inspect edges and evidence.
+          </p>
+        </div>
+      </section>
+
+      <section className="mt-8 flex flex-wrap items-center gap-2">
+        <span className="rounded-full border border-ink-800 px-2.5 py-1 text-xs text-ink-500">Year anchor: {resolvedYear}</span>
         {prevYear ? (
           <Link
-            href={buildLangPath("/globe", locale, yearNavQuery(prevYear))}
+            href={buildLangPath("/globe", locale, { year: String(prevYear), ...(searchParams.region ? { region: searchParams.region } : {}) })}
             className="rounded-lg border border-ink-700 px-2.5 py-1.5 text-xs hover:border-signal-300 hover:text-signal-200"
           >
             ← {prevYear}
           </Link>
         ) : null}
-        <span className="rounded-full border border-ink-800 px-3 py-1 text-xs text-ink-200">
-          Year {resolvedYear}
-        </span>
+        <span className="rounded-full border border-ink-800 px-3 py-1 text-xs text-ink-200">Year {resolvedYear}</span>
         {nextYear ? (
           <Link
-            href={buildLangPath("/globe", locale, yearNavQuery(nextYear))}
+            href={buildLangPath("/globe", locale, { year: String(nextYear), ...(searchParams.region ? { region: searchParams.region } : {}) })}
             className="rounded-lg border border-ink-700 px-2.5 py-1.5 text-xs hover:border-signal-300 hover:text-signal-200"
           >
             {nextYear} →
@@ -256,43 +332,33 @@ export default function GlobePage({
         <span className="ml-2 text-xs text-ink-500">Global timeline anchor has {allYears.length} active years</span>
       </section>
 
-      <section className="mt-4 flex flex-wrap gap-2 text-xs">
-        <span className="rounded-full border border-ink-800 px-2.5 py-1 text-ink-500">Intensity key</span>
-        {["Low", "Mid", "High"].map((label) => (
-          <span key={label} className="rounded-full border border-ink-800 px-2.5 py-1 text-ink-500">
-            {label}
-          </span>
-        ))}
-      </section>
-
       <section className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {regionCards
           .sort((a, b) => b.songCount - a.songCount || a.label.localeCompare(b.label))
           .map((item) => {
             const yearUrl = item.latestYear ? `/lens/${item.latestYear}?region=${item.code}` : null;
-            const style = intensityStyle(item.songCount, maxSongCount);
+            const intensity = maxSongCount > 0 ? item.songCount / maxSongCount : 0;
+            const base = Math.max(0.22, intensity);
+            const style = {
+              backgroundColor: `rgba(14, 165, 233, ${0.08 + base * 0.16})`,
+              borderColor: `rgba(56, 189, 248, ${0.18 + base * 0.35})`,
+              boxShadow: `0 0 0 1px rgba(255,255,255,0.03), 0 24px 70px -50px rgba(14, 165, 233, ${0.45 + base * 0.18})`,
+            } as const;
             const isRising = item.delta > 0;
             const isFlat = item.delta === 0;
             return (
-              <article
-                key={item.code}
-                className="card p-5 transition hover:border-signal-500/80"
-                style={style}
-              >
+              <article key={item.code} className="card p-5 transition hover:border-signal-500/80" style={style}>
                 <div className="flex items-center justify-between gap-2">
                   <h2 className="text-lg font-semibold text-ink-100">{item.label}</h2>
                   <Pill variant="mute">{item.code}</Pill>
                 </div>
                 <p className="mt-2 text-xs text-ink-400">
-                  {t(locale, "common.songs")} this slice:
-                  {" "}
+                  {t(locale, "common.songs")}:{" "}
                   <span className="text-ink-200">{item.songCount}</span>
                   {item.latestYear ? <span> ({item.latestYear})</span> : null}
                 </p>
                 <p className="mt-1 text-xs text-ink-400">
-                  {t(locale, "common.events")}: <span className="text-ink-200">{item.eventCount}</span>
-                  {" "}
-                  active in {resolvedYear}
+                  {t(locale, "common.events")}: <span className="text-ink-200">{item.eventCount}</span> active in {resolvedYear}
                 </p>
                 <p className="mt-1 text-xs text-ink-400">
                   top theme: <span className="text-ink-200">{item.topTheme ?? "not enough data"}</span>
@@ -313,7 +379,7 @@ export default function GlobePage({
                   {yearUrl ? (
                     <div className="flex flex-wrap gap-2">
                       <Link
-                        href={buildLangPath(yearUrl, locale, { year: resolvedYearLabel })}
+                        href={buildLangPath(`/lens/${item.latestYear}`, locale, { region: item.code })}
                         className="text-xs font-medium text-signal-300 hover:text-signal-200"
                       >
                         Open regional lens
@@ -348,5 +414,14 @@ export default function GlobePage({
         </div>
       </section>
     </main>
+  );
+}
+
+function ReadingChip({ title, value }: { title: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-ink-800 bg-ink-950/55 p-4">
+      <p className="text-[11px] uppercase tracking-[0.24em] text-ink-500">{title}</p>
+      <p className="mt-2 text-sm leading-6 text-ink-300">{value}</p>
+    </div>
   );
 }

@@ -11,9 +11,9 @@
 import { NextResponse } from "next/server";
 import { initDb } from "@/lib/db";
 import { findShortestPath } from "@/lib/graph/path-finder";
-import { getGraphNode, searchGraphNodes } from "@/lib/db/queries";
+import { getEvidenceForEdges, getGraphNode, searchGraphNodes } from "@/lib/db/queries";
 import { parse, GraphAskQuery, GraphPathQuery } from "@/lib/api-schemas";
-import type { GraphNode } from "@/lib/types";
+import type { Evidence, GraphNode } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -60,7 +60,80 @@ interface AskApiResponse {
   from: GraphNode | null;
   to: GraphNode | null;
   result: ReturnType<typeof findShortestPath>;
+  insight: {
+    headline: string;
+    summary: string;
+    averageEdgeConfidence: number;
+    evidenceRowCount: number;
+    dominantSources: string[];
+    hopTypes: string[];
+    routeHint?: string;
+  };
+  edgeEvidence: Record<string, Array<{
+    id: string;
+    title: string;
+    text: string;
+    source: string;
+    confidence: number;
+    matchedTerms: string[];
+  }>>;
   generatedAt: string;
+}
+
+function toEvidenceRows(
+  evidenceRows: Evidence[] | undefined,
+  matchedTerms: string[] = []
+): AskApiResponse["edgeEvidence"][string] {
+  if (!evidenceRows?.length) return [];
+  return evidenceRows.map((e) => ({
+    id: e.id,
+    title: e.evidenceType,
+    text: e.value,
+    source: e.source,
+    confidence: e.confidence,
+    matchedTerms,
+  }));
+}
+
+function buildAskInsight(
+  input: string,
+  fromLabel: string,
+  toLabel: string,
+  result: ReturnType<typeof findShortestPath>,
+  edgeEvidence: Record<string, Array<{
+    id: string;
+    title: string;
+    text: string;
+    source: string;
+    confidence: number;
+    matchedTerms: string[];
+  }>>
+): AskApiResponse["insight"] {
+  if (!result.found) {
+    return {
+      headline: `Could not find a path for “${input}”`,
+      summary: `No evidence-backed route was found between ${fromLabel} and ${toLabel} within ${result.reason ?? "your constraints"}.`,
+      averageEdgeConfidence: 0,
+      evidenceRowCount: Object.values(edgeEvidence).reduce((acc, rows) => acc + rows.length, 0),
+      dominantSources: [],
+      hopTypes: [],
+    };
+  }
+
+  const hopTypes = result.edges.map((edge) => edge.edgeType);
+  const uniqueSources = Array.from(new Set(result.edges.map((edge) => edge.sourceApi).filter(Boolean)));
+  const topSource = uniqueSources.length > 0 ? uniqueSources[0] : "mixed sources";
+  const evidenceRowCount = Object.values(edgeEvidence).reduce((acc, rows) => acc + rows.length, 0);
+
+  return {
+    headline: `Found a ${result.hopCount}-hop cultural bridge`,
+    summary: `Connecting ${fromLabel} to ${toLabel} through ${hopTypes.length} layer${hopTypes.length === 1 ? "" : "s"} (` +
+      `${topSource}; ${result.avgConfidence.toFixed(2)} mean confidence).`,
+    averageEdgeConfidence: result.avgConfidence,
+    evidenceRowCount,
+    dominantSources: uniqueSources,
+    hopTypes,
+  };
 }
 
 function normalizeQuery(raw: string): string {
@@ -260,6 +333,30 @@ export async function GET(req: Request) {
     maxHops,
     directed: false,
   });
+  const matchedTermsByEdge = result.found
+    ? Object.fromEntries(
+        result.edges.map((edge) => [edge.id, edge.matchedTerms ?? []])
+      )
+    : {};
+  const edgeEvidence = result.found
+    ? getEvidenceForEdges(result.edges.map((edge) => edge.id))
+    : {};
+  const edgeEvidenceRows = Object.fromEntries(
+    Object.entries(edgeEvidence).map(([edgeId, evidences]) => [
+      edgeId,
+      toEvidenceRows(evidences, matchedTermsByEdge[edgeId]),
+    ])
+  );
+  const insight = buildAskInsight(
+    parsed.data.q,
+    fromNode.label,
+    toNode.label,
+    result,
+    edgeEvidenceRows
+  );
+  const routeHint = result.found && result.edges.length > 0
+    ? `/graph?rootType=${encodeURIComponent(fromNode.nodeType)}&rootId=${encodeURIComponent(fromNode.id)}&hops=${Math.min(4, result.hopCount + 1)}`
+    : undefined;
 
   const response: AskApiResponse = {
     input: parsed.data.q,
@@ -284,8 +381,14 @@ export async function GET(req: Request) {
     from: fromNode,
     to: toNode,
     result,
+    insight,
+    edgeEvidence: edgeEvidenceRows,
     generatedAt: new Date().toISOString(),
   };
+
+  if (routeHint) {
+    response.insight.routeHint = routeHint;
+  }
 
   return NextResponse.json(response);
 }

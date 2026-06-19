@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { PathPanel } from "@/components/graph/path-panel";
+import { SemanticSearchPanel } from "@/components/graph/semantic-search-panel";
 import { t, resolveLocale, localePairs, type Locale } from "@/lib/i18n/strings";
 
 function buildSearchParam(url: string, lang: Locale, q?: string) {
@@ -65,6 +66,10 @@ export default function AskPage({
             {t(locale, key)}
           </a>
         ))}
+      </section>
+
+      <section className="mt-8">
+        <SemanticSearchPanel />
       </section>
 
       <section className="mt-8">

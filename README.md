@@ -35,10 +35,12 @@ npm run db:seed-chart
 #    in ~90s; the rest are Musixmatch-restricted)
 npm run db:fetch-lyrics
 
-# 3. Run the enrichment pipeline (embeddings + GLiNER + themes + events)
+# 3. Run the enrichment pipeline (embeddings + GLiNER/custom MusicNER + themes + events)
 npm run py:enrich       # full: 12-15 min with GLiNER
 # OR
 npm run py:enrich-fast  # skips embeddings + GLiNER: ~1s
+# Optional overrides:
+# MUSICNER_PROVIDER=custom MUSICNER_MODEL=<hf-id-or-local-path> npm run py:enrich
 
 # 4. Build similar_to edges
 npm run py:similar
@@ -176,8 +178,8 @@ When recording:
    weight, confidence, source API, model version, explanation,
    and ≥1 evidence row. The trust layer is the product.
 3. **0003 pluggable intelligence pipeline** — themes via
-   lexicon + embedding hybrid; NER via GLiNER (fallback
-   spaCy); moods via Cyanite (fallback lexicon). Each layer
+  lexicon + embedding hybrid; NER via GLiNER/custom MusicNER (fallback
+  spaCy); moods via Cyanite (fallback lexicon). Each layer
    has a documented model + version + fallback.
 4. **0004 per-event-category temporal windows** — elections
    are tight (3mo lead-in / 6mo echo); pandemics echo for 2

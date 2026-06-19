@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ConfidenceBar, Pill } from "@/components/ui/primitives";
+import { EvidencePreview, type EvidencePreviewItem } from "@/components/evidence/evidence-preview";
 import type { GraphNode, GraphEdge } from "@/lib/types";
 
 interface PathApiResponse {
@@ -18,6 +19,30 @@ interface PathApiResponse {
     exploredNodes: number;
     elapsedMs: number;
   };
+}
+
+interface AskInsight {
+  headline: string;
+  summary: string;
+  averageEdgeConfidence: number;
+  evidenceRowCount: number;
+  dominantSources: string[];
+  hopTypes: string[];
+  routeHint?: string;
+}
+
+interface AskEdgeEvidence {
+  id: string;
+  title: string;
+  text: string;
+  source: string;
+  confidence: number;
+  matchedTerms: string[];
+}
+
+interface AskApiPathData extends PathApiResponse {
+  insight?: AskInsight;
+  edgeEvidence?: Record<string, AskEdgeEvidence[]>;
 }
 
 type AskCandidate = {
@@ -41,6 +66,8 @@ interface AskApiResponse extends PathApiResponse {
     from: AskResolvedNode;
     to: AskResolvedNode;
   };
+  insight?: AskInsight;
+  edgeEvidence?: Record<string, AskEdgeEvidence[]>;
 }
 
 interface Props {
@@ -74,9 +101,9 @@ export function PathPanel({
   const [to, setTo] = useState(initialToId ?? "");
   const [edgeTypes, setEdgeTypes] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  const [data, setData] = useState<PathApiResponse | null>(null);
+  const [data, setData] = useState<AskApiPathData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [askInput, setAskInput] = useState("");
+  const [askInput, setAskInput] = useState(initialAsk ?? "");
   const [pathReveal, setPathReveal] = useState(false);
   const lastAutoAsk = useRef<string | null>(null);
   const [askResolution, setAskResolution] = useState<{
@@ -103,9 +130,9 @@ export function PathPanel({
       to: "versesignal:n:theme:violence",
     },
     {
-      label: "Levitating (Dua Lipa) → Ukraine war",
-      from: "versesignal:n:song:versesignal:2021:01:levitating-dua-lipa",
-      to: "versesignal:n:event:versesignal:ev:ukraine_war",
+      label: "Straightenin (Migos) → COVID-19 (real keyword match)",
+      from: "versesignal:n:song:versesignal:2021:33:straightenin-migos",
+      to: "versesignal:n:event:versesignal:ev:covid_19",
     },
   ];
 
@@ -113,6 +140,22 @@ export function PathPanel({
     if (initialFromId) setFrom(initialFromId);
     if (initialToId) setTo(initialToId);
   }, [initialFromId, initialToId]);
+
+  useEffect(() => {
+    if (initialAsk) {
+      const normalized = initialAsk.trim();
+      if (normalized) {
+        setAskInput(normalized);
+        // runAsk is defined further down in the file (TDZ-safe use).
+        // We can't call it here without triggering a "Cannot access
+        // before initialization" error on first render. Instead we
+        // seed the input value; the existing auto-run-on-input
+        // effect (line ~287) will fire runAsk once it stabilizes.
+      }
+    }
+    // We deliberately don't depend on runAsk here — the value is
+    // captured by the ask-input effect that runs after this one.
+  }, [initialAsk]);
 
   const runPath = useCallback(
     async (overrides?: { fromId?: string; toId?: string }) => {
@@ -197,6 +240,8 @@ export function PathPanel({
           from: typed.from,
           to: typed.to,
           result: typed.result,
+          insight: typed.insight,
+          edgeEvidence: typed.edgeEvidence,
         });
         setFrom(typed.from.id);
         setTo(typed.to.id);
@@ -253,6 +298,50 @@ export function PathPanel({
     const timer = window.setTimeout(() => setPathReveal(false), 900);
     return () => window.clearTimeout(timer);
   }, [pathReveal]);
+
+  const pathSongCards = data?.result.nodes.filter((node) => node.nodeType === "song") ?? [];
+
+  const songCards = pathSongCards.slice(1, -1).length > 0 ? pathSongCards.slice(1, -1) : [];
+
+  const nodeHref = (node: GraphNode): string | null => {
+    if (node.nodeType === "song" && node.id.startsWith("versesignal:n:song:")) {
+      const songId = node.id.slice("versesignal:n:song:".length);
+      return `/song/${encodeURIComponent(songId)}`;
+    }
+    if (node.nodeType === "artist") {
+      return `/artist/${encodeURIComponent(node.label)}`;
+    }
+    if (node.nodeType === "event" && node.id.startsWith("versesignal:n:event:")) {
+      const eventId = node.id.slice("versesignal:n:event:".length);
+      return `/event/${encodeURIComponent(eventId)}`;
+    }
+    if (node.nodeType === "theme") {
+      return `/theme/${encodeURIComponent(node.label)}`;
+    }
+    if (node.nodeType === "entity") {
+      return `/entity/${encodeURIComponent(node.label)}`;
+    }
+    if (node.nodeType === "year") {
+      return `/year/${encodeURIComponent(node.label)}`;
+    }
+    if (node.nodeType === "region") {
+      return `/globe?region=${encodeURIComponent(node.label)}`;
+    }
+    return null;
+  };
+
+  const evidencePreview = (edgeId: string): EvidencePreviewItem[] | null => {
+    const items = data?.edgeEvidence?.[edgeId];
+    if (!items || items.length === 0) return null;
+    return items.map((item) => ({
+      id: item.id,
+      title: item.title,
+      text: item.text,
+      source: item.source,
+      confidence: item.confidence,
+      matchedTerms: item.matchedTerms,
+    }));
+  };
 
   return (
     <div className="card p-5">
@@ -441,6 +530,31 @@ export function PathPanel({
 
       {data?.result.found ? (
         <div className="mt-5 space-y-3">
+          {data.insight ? (
+            <div className="rounded border border-signal-700/40 bg-signal-500/8 p-3 text-xs">
+              <p className="font-medium text-signal-200">{data.insight.headline}</p>
+              <p className="mt-1 text-ink-300">{data.insight.summary}</p>
+              <div className="mt-2 flex flex-wrap gap-2 text-ink-500">
+                <span>Evidence rows: {data.insight.evidenceRowCount}</span>
+                <span>·</span>
+                <span>Avg confidence: {(data.insight.averageEdgeConfidence * 100).toFixed(0)}%</span>
+                {data.insight.routeHint ? (
+                  <>
+                    <span>·</span>
+                    <a href={data.insight.routeHint} className="text-signal-300 hover:text-signal-200">
+                      Open in graph
+                    </a>
+                  </>
+                ) : null}
+                {data.insight.dominantSources.length ? (
+                  <>
+                    <span>·</span>
+                    <span>Sources: {data.insight.dominantSources.slice(0, 3).join(", ")}</span>
+                  </>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
           <div className="inline-flex animate-reveal-burst items-center gap-2 rounded-md border border-signal-700/50 bg-signal-500/10 px-3 py-1 text-xs text-signal-200">
             <span>🔥</span>
             <span>Path found and unlocked. You just discovered a cultural bridge.</span>
@@ -450,6 +564,27 @@ export function PathPanel({
             {" "}
             avg confidence {data.result.avgConfidence.toFixed(2)} · {data.result.exploredNodes} nodes explored
           </div>
+          {songCards.length > 0 ? (
+            <div className="card space-y-2 p-3">
+              <div className="text-xs uppercase tracking-wider text-ink-500">Song cards on the path</div>
+              <div className="grid gap-2 md:grid-cols-2">
+                {songCards.map((songNode) => {
+                  const href = nodeHref(songNode);
+                  if (!href) return null;
+                  return (
+                    <a
+                      key={songNode.id}
+                      href={href}
+                      className="rounded border border-ink-800 bg-ink-900/55 p-2 text-sm hover:border-signal-600"
+                    >
+                      <p className="text-ink-100">{songNode.label}</p>
+                      <p className="mt-1 text-[10px] text-ink-500">Song in bridge</p>
+                    </a>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
           <ol className={`space-y-2 ${pathReveal ? "animate-path-reveal" : ""}`}>
             {data.result.nodes.map((node, i) => {
               const edge = data.result.edges[i - 1];
@@ -472,13 +607,27 @@ export function PathPanel({
                         {edge.explanation ? (
                           <p className="mt-1 text-[11px] text-ink-400 italic">{edge.explanation}</p>
                         ) : null}
+                        {evidencePreview(edge.id) ? (
+                          <div className="mt-2">
+                            <EvidencePreview items={evidencePreview(edge.id) ?? []} title="Path evidence" maxItems={2} />
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   ) : null}
                   <div className="rounded border border-ink-800 bg-ink-900/60 p-3">
                     <div className="flex items-center gap-2">
                       <Pill variant="mute">{node.nodeType}</Pill>
-                      <span className="text-sm text-ink-100">{node.label}</span>
+                      {nodeHref(node) ? (
+                        <a
+                          href={nodeHref(node) ?? "#"}
+                          className="text-sm text-ink-100 hover:text-signal-300"
+                        >
+                          {node.label}
+                        </a>
+                      ) : (
+                        <span className="text-sm text-ink-100">{node.label}</span>
+                      )}
                     </div>
                     <div className="mt-1 font-mono text-[10px] text-ink-500">{node.id}</div>
                   </div>

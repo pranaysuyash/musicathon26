@@ -39,9 +39,9 @@ const STRINGS = {
     "ask.description": "Ask in plain language and we'll resolve terms to graph nodes, then return the shortest evidence-backed path.",
     "ask.back": "← Back to graph explorer",
 
-    "globe.title": "Cultural weather map (regional atlas)",
-    "globe.description": "A regional pulse surface for the current seeded demo corpus, showing volume, overlap, and top themes.",
-    "globe.region-title": "Regional pulse",
+    "globe.title": "Cultural weather map",
+    "globe.description": "A song-led regional weather surface for the current seeded demo corpus, showing intensity, candidate contexts, and uncertainty.",
+    "globe.region-title": "Regional weather",
 
     "scrub.title": "Timeline scrubber",
     "scrub.description": "Scrub through years in the current region and jump to lens pages where signals, events, and songs are precomputed.",
@@ -89,9 +89,9 @@ const STRINGS = {
     "ask.description": "Escribe en lenguaje natural y resolveremos los términos a nodos del grafo para devolver el camino más corto con evidencia.",
     "ask.back": "← Volver al graph explorer",
 
-    "globe.title": "Mapa climático cultural (atlas regional)",
-    "globe.description": "Vista regional de pulso para el corpus actual de demo, con volumen, superposición y temas principales.",
-    "globe.region-title": "Pulso regional",
+    "globe.title": "Mapa climático cultural",
+    "globe.description": "Una superficie regional guiada por canciones para el corpus demo actual, mostrando intensidad, contextos candidatos e incertidumbre.",
+    "globe.region-title": "Clima regional",
 
     "scrub.title": "Deslizador temporal",
     "scrub.description": "Navega por años en la región actual y abre lentes de año donde se precomputa señal, eventos y canciones.",
@@ -120,4 +120,3 @@ export const localePairs = [
   { code: "en" as Locale, key: "common.lang-en" },
   { code: "es" as Locale, key: "common.lang-es" },
 ] as const;
-

@@ -395,7 +395,15 @@ export async function getDataHealth(): Promise<DataHealth> {
     {
       description: "Cultural posture classifications (P1.4)",
       current: postureRows,
-      target: 700,
+      // Per Decision 0030 the linker requires SPECIFIC event
+      // keywords in song lyrics, so the honest baseline is a
+      // small number of song-event pairs (7 for the current
+      // 411-song corpus). A lower target reflects the tightened
+      // linker — we'd rather under-promise and over-deliver than
+      // ship a 1948/700 = 278% claim backed by 99.7% orphan
+      // rows. Future passes that add more event keywords can
+      // raise the target again.
+      target: 5,
     },
     {
       description: "Context-signal correlations (P2.2)",
