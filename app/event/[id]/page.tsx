@@ -156,7 +156,11 @@ export default function EventPage({ params, searchParams }: PageProps) {
         <ul className="card divide-y divide-ink-800/60">
           {linked.length === 0 ? (
             <li className="p-5 text-sm text-ink-500">
-              No songs linked yet. Run <code className="font-mono">npm run py:enrich</code>.
+              No songs in this corpus mention the event by name
+              (per Decision 0030 the linker requires explicit
+              event-keyword evidence). The pre-event signal
+              resonance section below shows how chart mood
+              drifted before the event, even without direct links.
             </li>
           ) : (
             linked.map((row) => (
