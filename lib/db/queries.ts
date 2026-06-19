@@ -837,19 +837,25 @@ export function getSimilarSongs(songId: string, limit: number = 8): SimilarSong[
   // catch the undirected relationship. The schema stores both
   // directions in build-similar-edges.py, so a single query
   // on src returns one direction; we OR with dst to get both.
+  //
+  // Per motto 0.11, dedup on (title, year) so the same song
+  // charting at multiple regional ranks (e.g. Blinding Lights at
+  // US 2020:01 + UK-2020:01 + DE-2020:01) doesn't show up 3+ times
+  // in the "similar songs" list. GROUP BY (title, year) collapses.
   const direct = all<SimilarSong>(
     `
     SELECT
-        other.id AS song_id,
+        MIN(other.id) AS song_id,
         other.title,
         other.artist,
         other.year,
-        ge.weight
+        MAX(ge.weight) AS weight
       FROM graph_edges ge
       JOIN songs other ON other.id = SUBSTR(ge.dst_id, 20)
      WHERE ge.src_id = ?
        AND ge.edge_type = 'similar_to'
-     ORDER BY ge.weight DESC
+     GROUP BY other.title, other.year
+     ORDER BY weight DESC
      LIMIT ?
     `,
     `versesignal:n:song:${songId}`,
@@ -861,16 +867,17 @@ export function getSimilarSongs(songId: string, limit: number = 8): SimilarSong[
   const back = all<SimilarSong>(
     `
     SELECT
-        other.id AS song_id,
+        MIN(other.id) AS song_id,
         other.title,
         other.artist,
         other.year,
-        ge.weight
+        MAX(ge.weight) AS weight
       FROM graph_edges ge
       JOIN songs other ON other.id = SUBSTR(ge.src_id, 20)
      WHERE ge.dst_id = ?
        AND ge.edge_type = 'similar_to'
-     ORDER BY ge.weight DESC
+     GROUP BY other.title, other.year
+     ORDER BY weight DESC
      LIMIT ?
     `,
     `versesignal:n:song:${songId}`,
