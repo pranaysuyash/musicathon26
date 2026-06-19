@@ -1,9 +1,29 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import { Fraunces, IBM_Plex_Mono, Manrope } from "next/font/google";
 import "./globals.css";
 
 import { TelemetryReporter } from "@/components/telemetry/telemetry-reporter";
 import { resolveLocale } from "@/lib/i18n/strings";
+
+const bodyFont = Manrope({
+  subsets: ["latin"],
+  variable: "--font-body",
+  display: "swap",
+});
+
+const displayFont = Fraunces({
+  subsets: ["latin"],
+  variable: "--font-display",
+  display: "swap",
+});
+
+const monoFont = IBM_Plex_Mono({
+  subsets: ["latin"],
+  variable: "--font-mono",
+  display: "swap",
+  weight: ["400", "500"],
+});
 
 export const metadata: Metadata = {
   metadataBase: new URL(
@@ -61,8 +81,8 @@ function detectLocaleFromHeaders() {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const locale = detectLocaleFromHeaders();
   return (
-    <html lang={locale}>
-      <body className="scrollbar-thin">
+    <html lang={locale} className={`${bodyFont.variable} ${displayFont.variable} ${monoFont.variable}`}>
+      <body className="scrollbar-thin font-sans">
         <a
           href="#main"
           className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-signal-500 focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-ink-950 focus:shadow-lg"

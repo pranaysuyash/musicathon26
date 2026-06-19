@@ -130,7 +130,11 @@ export default async function LensPage({
         <div className="flex items-center gap-2">
           <Pill variant="signal">{t(locale, "lens.title")}</Pill>
           <Pill variant="mute">{REGION_LABELS[region] ?? region}</Pill>
-          <RegionPicker currentRegion={region} currentYear={year} />
+          <RegionPicker
+            currentRegion={region}
+            currentYear={year}
+            locale={locale}
+          />
         </div>
         <h1 className="h-display mt-4 text-5xl font-semibold tracking-tight md:text-6xl text-balance">
           {year}

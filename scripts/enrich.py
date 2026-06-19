@@ -179,7 +179,7 @@ MOOD_LEXICON: dict[str, list[str]] = {
 class Pipeline:
     conn: sqlite3.Connection
     embedder: object | None
-    gliner: object | None
+    gliner: "NerBackend | None"
     spacy_nlp: object | None
     embed_dim: int
     theme_centroids: dict[str, list[float]] | None
@@ -244,6 +244,26 @@ def init_embedder(model_name: str = "sentence-transformers/all-MiniLM-L6-v2"):
     return model, dim, model_name
 
 
+@dataclass
+class NerBackend:
+    provider: str
+    model: object
+    model_version: str
+    labels_version: str = "unknown"
+
+
+def normalize_musicner_provider(raw: str | None) -> str:
+    provider = (raw or os.getenv("MUSICNER_PROVIDER", "auto")).strip().lower()
+    if provider in {"auto", "gliner", "custom", "musicner", "spacy"}:
+        return provider
+    print(f"  · Unknown MUSICNER_PROVIDER={provider!r}; falling back to auto", file=sys.stderr)
+    return "auto"
+
+
+def musicner_model_arg(cli_value: str | None) -> str:
+    return cli_value or os.getenv("MUSICNER_MODEL", "urchade/gliner_medium-v2.1")
+
+
 def embed_texts(embedder, texts: list[str]) -> list[list[float]]:
     if embedder is None or not texts:
         return []
@@ -251,7 +271,7 @@ def embed_texts(embedder, texts: list[str]) -> list[list[float]]:
     return [v.tolist() for v in vectors]
 
 
-def init_gliner() -> object | None:
+def init_gliner(model_name: str = "urchade/gliner_medium-v2.1") -> NerBackend | None:
     try:
         import gliner  # noqa: F401
     except ImportError:
@@ -263,10 +283,62 @@ def init_gliner() -> object | None:
         # label taxonomy changes; the model_version on new rows
         # reflects both the model and the labels version.
         from lib.nlp.ner_labels import LABELS_VERSION  # type: ignore
-        return GLiNER.from_pretrained("urchade/gliner_medium-v2.1"), LABELS_VERSION
+        return NerBackend(
+            provider="gliner",
+            model=GLiNER.from_pretrained(model_name),
+            model_version=model_name,
+            labels_version=LABELS_VERSION,
+        )
     except Exception as err:  # noqa: BLE001
         print(f"  · GLiNER unavailable: {err}", file=sys.stderr)
         return None
+
+
+def init_musicner(model_name: str) -> NerBackend | None:
+    try:
+        from gliner import GLiNER
+    except ImportError:
+        return None
+    try:
+        from lib.nlp.ner_labels import LABELS_VERSION  # type: ignore
+        return NerBackend(
+            provider="musicner",
+            model=GLiNER.from_pretrained(model_name),
+            model_version=model_name,
+            labels_version=LABELS_VERSION,
+        )
+    except Exception as err:  # noqa: BLE001
+        print(f"  · Custom MusicNER unavailable ({model_name}): {err}", file=sys.stderr)
+        return None
+
+
+def init_ner_backend(requested_provider: str, cli_model: str | None) -> NerBackend | None:
+    provider = normalize_musicner_provider(requested_provider)
+    resolved_model = musicner_model_arg(cli_model)
+
+    if provider == "spacy":
+        return None
+
+    if provider == "gliner":
+        return init_gliner(resolved_model)
+
+    if provider == "custom":
+        backend = init_musicner(resolved_model)
+        if backend is not None:
+            return backend
+        print("  · Custom MusicNER unavailable; skipping to spaCy fallback.", file=sys.stderr)
+        return None
+
+    # auto / musicner: prefer custom, then default GLiNER.
+    if provider in {"auto", "musicner"}:
+        backend = init_musicner(resolved_model)
+        if backend is not None:
+            return backend
+        if provider in {"auto", "musicner"}:
+            print("  · Custom MusicNER unavailable; falling back to default GLiNER.", file=sys.stderr)
+        return init_gliner()
+
+    return None
 
 
 def init_spacy() -> object | None:
@@ -385,7 +457,7 @@ def mood_scoring(lyrics: str) -> list[tuple[str, float, str]]:
 
 
 def run_ner(p: Pipeline, lyrics: str) -> list[dict]:
-    """Return list of {text, label, start, end, source, confidence}."""
+    """Return list of {text, label, start, end, source, confidence, model_version}."""
     out: list[dict] = []
     if not lyrics:
         return out
@@ -411,32 +483,39 @@ def run_ner(p: Pipeline, lyrics: str) -> list[dict]:
             print(f"  · gazetteer load failed: {err}", file=sys.stderr)
 
     if gazetteer:
+        import re
         for line in lines:
-            lower = line.lower()
             for phrase, target in gazetteer.items():
+                # Per motto_v3 §0.7: matches must be word-bounded to
+                # avoid substring collisions (e.g., "ar" matching
+                # "around"). For single-word phrases, use \b on both
+                # sides; for multi-word phrases, the whitespace
+                # already acts as a boundary, but we still wrap
+                # with \b at the start/end for ASCII alphanumerics.
                 phrase_lc = phrase.lower()
-                start = 0
-                while True:
-                    idx = lower.find(phrase_lc, start)
-                    if idx == -1:
-                        break
+                # Choose boundary characters that keep the phrase
+                # intact but exclude word characters at the start/end.
+                if re.match(r"^[A-Za-z0-9]", phrase_lc) and re.match(r"[A-Za-z0-9]$", phrase_lc):
+                    pattern = re.compile(r"\b" + re.escape(phrase_lc) + r"\b", re.IGNORECASE)
+                else:
+                    pattern = re.compile(re.escape(phrase_lc), re.IGNORECASE)
+                for m in pattern.finditer(line):
                     out.append({
-                        "text": line[idx:idx + len(phrase)],
+                        "text": line[m.start():m.end()],
                         "label": target.get("type", "entity").lower(),
-                        "start": idx,
-                        "end": idx + len(phrase),
+                        "start": m.start(),
+                        "end": m.end(),
                         "source": "gazetteer",
                         "confidence": 0.95,  # high confidence: hand-curated
-                        "canonical": target.get("canonical", phrase),
+                        "model_version": "gazetteer-2026-06-18",
                         "labels_version": "gazetteer-2026-06-18",
+                        "canonical": target.get("canonical", phrase),
                     })
-                    start = idx + len(phrase_lc)
 
     if p.gliner is not None:
-        # The Pipeline now stores (gliner, labels_version) tuple in p.gliner
-        # (or just the model in older runs). Normalize.
-        gliner_model = p.gliner[0] if isinstance(p.gliner, tuple) else p.gliner
-        labels_version = p.gliner[1] if isinstance(p.gliner, tuple) else "unknown"
+        backend = p.gliner
+        source = "gliner" if backend.provider == "gliner" else "musicner"
+        gliner_model = backend.model
         from lib.nlp.ner_labels import NER_LABELS, get_threshold, DEFAULT_NER_THRESHOLD  # type: ignore
         try:
             for line in lines:
@@ -453,9 +532,10 @@ def run_ner(p: Pipeline, lyrics: str) -> list[dict]:
                         "label": label,
                         "start": ent.get("start", 0),
                         "end": ent.get("end", 0),
-                        "source": "gliner",
+                        "source": source,
                         "confidence": score,
-                        "labels_version": labels_version,
+                        "labels_version": backend.labels_version,
+                        "model_version": backend.model_version,
                     })
         except Exception as err:  # noqa: BLE001
             print(f"  · GLiNER predict failed: {err}", file=sys.stderr)
@@ -470,6 +550,8 @@ def run_ner(p: Pipeline, lyrics: str) -> list[dict]:
                     "end": ent.end_char,
                     "source": "spacy",
                     "confidence": 0.6,
+                    "model_version": "spacy_en_core_web_sm",
+                    "labels_version": "spacy_en_core_web_sm",
                 })
     return out
 
@@ -519,9 +601,7 @@ def insert_mention(conn: sqlite3.Connection, song_id: str, line_id: str, ent_id:
             ent["end"],
             ent["confidence"],
             ent["source"],
-            "gliner_medium-v2.1" if ent["source"] == "gliner" else (
-                "gazetteer-2026-06-18" if ent["source"] == "gazetteer" else "spacy_en_core_web_sm"
-            ),
+            ent.get("model_version", "spacy_en_core_web_sm"),
         ),
     )
 
@@ -644,7 +724,11 @@ def main() -> int:
     parser.add_argument("--song-id", default=None, help="Limit enrichment to a single song id")
     parser.add_argument("--limit", type=int, default=0, help="Limit songs (debug)")
     parser.add_argument("--skip-gliner", action="store_true",
-                        help="Skip GLiNER NER even if the model loads (faster re-runs when only themes/events are needed)")
+                        help="Skip GLiNER/custom MusicNER even if models load (faster re-runs when only themes/events are needed)")
+    parser.add_argument("--musicner-provider", default=os.getenv("MUSICNER_PROVIDER", "auto"),
+                        help="MusicNER provider: auto|gliner|custom|musicner|spacy")
+    parser.add_argument("--musicner-model", default=os.getenv("MUSICNER_MODEL"),
+                        help="MusicNER model id/path for gliner/custom providers")
     parser.add_argument("--only-missing-embeddings", action="store_true",
                         help="Process only songs that have lyrics but no embedding (P7.1: post-lyrics-fetch fix)")
     args = parser.parse_args()
@@ -655,10 +739,17 @@ def main() -> int:
     embedder, dim, model_version = (None, 0, "none")
     if not args.skip_embeddings:
         embedder, dim, model_version = init_embedder()
-    gliner = init_gliner()
+    gliner = init_ner_backend(args.musicner_provider, args.musicner_model) if not args.skip_gliner else None
+    if args.skip_gliner:
+        print("  · NER model loading skipped (--skip-gliner)")
     spacy_nlp = init_spacy()
     theme_centroids = get_or_compute_centroids(Pipeline(conn, embedder, gliner, spacy_nlp, dim, None, model_version)) if embedder else {}
-    print(f"✓ Models ready: embedder={model_version}  gliner={'yes' if gliner else 'no'}  spacy={'yes' if spacy_nlp else 'no'}  themes={len(theme_centroids)}")
+    ner_desc = (
+        f"{gliner.provider}:{gliner.model_version}" if gliner is not None
+        else "spacy" if spacy_nlp is not None and not args.skip_gliner
+        else "disabled"
+    )
+    print(f"✓ Models ready: embedder={model_version}  ner={ner_desc}  spacy={'yes' if spacy_nlp else 'no'}  themes={len(theme_centroids)}")
 
     events = load_events(conn)
     event_vecs = build_event_embeddings(Pipeline(conn, embedder, gliner, spacy_nlp, dim, theme_centroids, model_version), events) if embedder else {}

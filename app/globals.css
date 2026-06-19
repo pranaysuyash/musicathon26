@@ -14,13 +14,38 @@
   }
   html, body {
     @apply bg-ink-950 text-ink-100 antialiased;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: var(--font-body), system-ui, -apple-system, sans-serif;
   }
   body {
-    background: radial-gradient(ellipse at top, rgba(14, 165, 233, 0.04) 0%, transparent 60%),
-                radial-gradient(ellipse at bottom right, rgba(217, 70, 239, 0.03) 0%, transparent 50%),
-                #060609;
+    background:
+      radial-gradient(circle at 12% 8%, rgba(14, 165, 233, 0.15) 0, transparent 30%),
+      radial-gradient(circle at 84% 14%, rgba(217, 70, 239, 0.14) 0, transparent 24%),
+      radial-gradient(circle at 50% 110%, rgba(52, 211, 153, 0.08) 0, transparent 36%),
+      linear-gradient(180deg, #09090d 0%, #050508 58%, #040405 100%);
     min-height: 100vh;
+    position: relative;
+    isolation: isolate;
+  }
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: -1;
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+    background-size: 100% 84px, 88px 100%;
+    mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.7), transparent 92%);
+  }
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: -1;
+    opacity: 0.28;
+    background: radial-gradient(circle at center, transparent 0, rgba(0, 0, 0, 0.22) 100%);
   }
   ::selection {
     background: rgba(14, 165, 233, 0.3);
@@ -50,6 +75,27 @@
   .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
   .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
   .scrollbar-thin::-webkit-scrollbar-thumb { background: #2d2d33; border-radius: 3px; }
+  .animate-card-pop-in {
+    animation: cardPop 400ms ease-out both;
+  }
+  .animate-micro-glow {
+    animation: microGlow 1.6s ease-in-out infinite;
+  }
+  .animate-graph-pulse {
+    animation: graphPulse 900ms ease-in-out both;
+  }
+  .animate-path-reveal {
+    animation: pathReveal 600ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .animate-reveal-burst {
+    animation: revealBurst 900ms ease-out;
+  }
+  .animate-edge-pulse {
+    animation: edgePulse 900ms ease-out;
+  }
+  .animate-path-panel-pulse {
+    animation: panelPulse 900ms ease-out;
+  }
 }
 
 @layer components {
@@ -74,6 +120,85 @@
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
+  }
+}
+
+@keyframes cardPop {
+  from {
+    opacity: 0.01;
+    transform: translateY(12px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes microGlow {
+  0%, 100% {
+    transform: scaleX(0.96);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scaleX(1.06);
+    opacity: 1;
+  }
+}
+
+@keyframes graphPulse {
+  0% {
+    transform: scale(0.995);
+    filter: brightness(1);
+  }
+  50% {
+    transform: scale(1.005);
+    filter: brightness(1.08);
+  }
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+}
+
+@keyframes pathReveal {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes revealBurst {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes edgePulse {
+  0% {
+    transform: translateY(4px);
+    opacity: 0.7;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes panelPulse {
+  from {
+    transform: translateY(4px);
+  }
+  to {
+    transform: translateY(0);
   }
 }
 

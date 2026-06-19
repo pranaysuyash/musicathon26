@@ -211,21 +211,28 @@ def classify_song_event(
             evidence,
         )
 
-    # 5. CONTRADICTION: serious event + theme directly opposing
-    #    (e.g., 'love' during war → escapist / contradiction)
-    if is_serious and keyword_overlap >= 0.05:
+    # 5. CONTRADICTION: serious event + theme/mood that directly
+    #    conflicts (e.g., romantic lyrics during a war). The signal
+    #    is that the song's mood says the opposite of what the
+    #    event would expect. We require some keyword overlap to
+    #    confirm the event is in scope, but no theme overlap
+    #    (otherwise it's a reflection).
+    if is_serious and keyword_overlap > 0 and theme_overlap < 0.1:
         return (
             "contradiction",
-            0.3,
-            f"event keywords appear in song mood during serious event",
+            0.3 + 0.2 * keyword_overlap,
+            f"song mood diverges from event themes during {ev.get('category')}",
             evidence,
         )
 
     # 6. SHADOW: mood matches event keywords but no theme overlap
-    if keyword_overlap >= 0.2 and theme_overlap < 0.2:
+    #    AND the song doesn't directly address the event. This
+    #    captures the "cultural undertow" — songs that resonate
+    #    with the emotional weight of an event without naming it.
+    if keyword_overlap >= 0.1 and theme_overlap < 0.2:
         return (
             "shadow",
-            0.4,
+            0.4 + 0.2 * keyword_overlap,
             "song mood echoes the event without direct reference",
             evidence,
         )

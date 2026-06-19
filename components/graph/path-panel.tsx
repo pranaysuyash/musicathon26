@@ -47,6 +47,7 @@ interface Props {
   initialFromId?: string;
   initialToId?: string;
   initialAsk?: string;
+  onPathFound?: (result: PathApiResponse["result"]) => void;
 }
 
 const ASK_EXAMPLES = [
@@ -63,7 +64,12 @@ const EDGE_TYPES = [
   { value: "performed_by", label: "Artist" },
 ];
 
-export function PathPanel({ initialFromId, initialToId, initialAsk }: Props) {
+export function PathPanel({
+  initialFromId,
+  initialToId,
+  initialAsk,
+  onPathFound,
+}: Props) {
   const [from, setFrom] = useState(initialFromId ?? "");
   const [to, setTo] = useState(initialToId ?? "");
   const [edgeTypes, setEdgeTypes] = useState<string[]>([]);
@@ -71,11 +77,14 @@ export function PathPanel({ initialFromId, initialToId, initialAsk }: Props) {
   const [data, setData] = useState<PathApiResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [askInput, setAskInput] = useState("");
+  const [pathReveal, setPathReveal] = useState(false);
   const lastAutoAsk = useRef<string | null>(null);
   const [askResolution, setAskResolution] = useState<{
     from: AskResolvedNode;
     to: AskResolvedNode;
   } | null>(null);
+  const [candidateFromId, setCandidateFromId] = useState<string | null>(null);
+  const [candidateToId, setCandidateToId] = useState<string | null>(null);
 
   const presets: Array<{ label: string; from: string; to: string }> = [
     {
@@ -105,24 +114,37 @@ export function PathPanel({ initialFromId, initialToId, initialAsk }: Props) {
     if (initialToId) setTo(initialToId);
   }, [initialFromId, initialToId]);
 
-  async function run() {
-    if (!from || !to) return;
+  const runPath = useCallback(
+    async (overrides?: { fromId?: string; toId?: string }) => {
+    const sourceFrom = overrides?.fromId ?? from;
+    const sourceTo = overrides?.toId ?? to;
+    if (!sourceFrom || !sourceTo) return;
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams({ from, to, maxHops: "6" });
+      const params = new URLSearchParams({ from: sourceFrom, to: sourceTo, maxHops: "6" });
       for (const et of edgeTypes) params.append("edgeType", et);
       const r = await fetch(`/api/path?${params}`);
       if (!r.ok) throw new Error(`path query failed: ${r.status}`);
       const j = (await r.json()) as PathApiResponse;
       setData(j);
+      setFrom(sourceFrom);
+      setTo(sourceTo);
+      setCandidateFromId(sourceFrom);
+      setCandidateToId(sourceTo);
+      if (j.result.found) {
+        onPathFound?.(j.result);
+        setPathReveal(true);
+      }
       setAskResolution(null);
     } catch (err) {
       setError((err as Error).message);
     } finally {
       setLoading(false);
     }
-  }
+  },
+    [from, to, edgeTypes, onPathFound]
+  );
 
   const runAsk = useCallback(
     async (question?: string) => {
@@ -158,6 +180,8 @@ export function PathPanel({ initialFromId, initialToId, initialAsk }: Props) {
                 from: resolvedFrom as AskResolvedNode,
                 to: resolvedTo as AskResolvedNode,
               });
+              setCandidateFromId((resolvedFrom as AskResolvedNode).resolvedId ?? null);
+              setCandidateToId((resolvedTo as AskResolvedNode).resolvedId ?? null);
             }
           }
           if (j.error) {
@@ -176,15 +200,42 @@ export function PathPanel({ initialFromId, initialToId, initialAsk }: Props) {
         });
         setFrom(typed.from.id);
         setTo(typed.to.id);
+        setCandidateFromId(typed.from.id);
+        setCandidateToId(typed.to.id);
         setAskResolution(typed.resolved);
+        if (typed.result.found) {
+          onPathFound?.(typed.result);
+          setPathReveal(true);
+        }
       } catch (err) {
         setError((err as Error).message);
       } finally {
         setLoading(false);
       }
     },
-    [askInput, edgeTypes]
+    [askInput, edgeTypes, onPathFound]
   );
+
+  const runFromSelectedCandidates = useCallback(() => {
+    if (!candidateFromId || !candidateToId) return;
+    runPath({ fromId: candidateFromId, toId: candidateToId });
+  }, [candidateFromId, candidateToId, runPath]);
+
+  useEffect(() => {
+    if (!askResolution) {
+      return;
+    }
+    setCandidateFromId(
+      askResolution.from.resolvedId ??
+        askResolution.from.candidates.at(0)?.id ??
+        candidateFromId
+    );
+    setCandidateToId(
+      askResolution.to.resolvedId ??
+        askResolution.to.candidates.at(0)?.id ??
+        candidateToId
+    );
+  }, [askResolution, candidateFromId, candidateToId]);
 
   useEffect(() => {
     if (!initialAsk?.trim()) return;
@@ -195,7 +246,13 @@ export function PathPanel({ initialFromId, initialToId, initialAsk }: Props) {
       setAskInput(normalized);
     }
     void runAsk(normalized);
-  }, [initialAsk, runAsk]);
+  }, [initialAsk, runAsk, askInput]);
+
+  useEffect(() => {
+    if (!pathReveal) return;
+    const timer = window.setTimeout(() => setPathReveal(false), 900);
+    return () => window.clearTimeout(timer);
+  }, [pathReveal]);
 
   return (
     <div className="card p-5">
@@ -247,11 +304,45 @@ export function PathPanel({ initialFromId, initialToId, initialAsk }: Props) {
             {askResolution.from.suggestion ? (
               <p className="mt-1 text-amber-300">Tip: {askResolution.from.suggestion}</p>
             ) : null}
-            {askResolution.from.candidates.length > 1 ? (
-              <p className="mt-1 text-ink-500">
-                Multiple matches. Use a typed prompt like “song X” or “event X” for precision.
-              </p>
-            ) : null}
+            <p className="mt-1 text-ink-500">Multiple matches are shown as selectable candidates.</p>
+            <div className="mt-2 space-y-2">
+              <div className="flex flex-wrap gap-2">
+                <span className="text-ink-500">From:</span>
+                {askResolution.from.candidates.map((candidate) => (
+                  <button
+                    key={`from-${candidate.id}`}
+                    type="button"
+                    onClick={() => setCandidateFromId(candidate.id)}
+                    className={`pill ${candidateFromId === candidate.id ? "pill-signal" : "pill-mute"}`}
+                  >
+                    {candidate.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <span className="text-ink-500">To:</span>
+                {askResolution.to.candidates.map((candidate) => (
+                  <button
+                    key={`to-${candidate.id}`}
+                    type="button"
+                    onClick={() => setCandidateToId(candidate.id)}
+                    className={`pill ${candidateToId === candidate.id ? "pill-signal" : "pill-mute"}`}
+                  >
+                    {candidate.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="mt-2">
+              <button
+                type="button"
+                onClick={runFromSelectedCandidates}
+                disabled={!candidateFromId || !candidateToId}
+                className="rounded-lg bg-signal-500 px-3 py-1.5 text-xs font-medium text-ink-950 transition hover:bg-signal-400 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Run selected candidates
+              </button>
+            </div>
           </div>
         ) : null}
       </div>
@@ -331,7 +422,7 @@ export function PathPanel({ initialFromId, initialToId, initialAsk }: Props) {
 
       <div className="mt-3 flex items-center gap-2">
         <button
-          onClick={run}
+          onClick={() => runPath()}
           disabled={loading || !from || !to}
           className="rounded-lg bg-signal-500 px-4 py-2 text-sm font-medium text-ink-950 transition hover:bg-signal-400 disabled:cursor-not-allowed disabled:opacity-50"
         >
@@ -350,16 +441,20 @@ export function PathPanel({ initialFromId, initialToId, initialAsk }: Props) {
 
       {data?.result.found ? (
         <div className="mt-5 space-y-3">
+          <div className="inline-flex animate-reveal-burst items-center gap-2 rounded-md border border-signal-700/50 bg-signal-500/10 px-3 py-1 text-xs text-signal-200">
+            <span>🔥</span>
+            <span>Path found and unlocked. You just discovered a cultural bridge.</span>
+          </div>
           <div className="text-xs text-ink-400">
             {data.result.hopCount} hop{data.result.hopCount === 1 ? "" : "s"} ·
             {" "}
             avg confidence {data.result.avgConfidence.toFixed(2)} · {data.result.exploredNodes} nodes explored
           </div>
-          <ol className="space-y-2">
+          <ol className={`space-y-2 ${pathReveal ? "animate-path-reveal" : ""}`}>
             {data.result.nodes.map((node, i) => {
               const edge = data.result.edges[i - 1];
               return (
-                <li key={node.id}>
+                <li key={node.id} className="transition-all">
                   {i > 0 ? (
                     <div className="mb-2 ml-4 flex items-start gap-3">
                       <div className="flex flex-col items-center">

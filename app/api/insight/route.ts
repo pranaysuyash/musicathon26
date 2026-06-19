@@ -6,7 +6,7 @@ import { initDb } from "@/lib/db";
 import { getYearThemes, getYearMoods, REGION_LABELS } from "@/lib/db/queries";
 import { all } from "@/lib/db/sql";
 import { buildInsightNarration, synthesizeSpeech } from "@/lib/api/elevenlabs";
-import { writeFile, mkdir } from "node:fs/promises";
+import { access, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +21,7 @@ export async function GET(req: Request) {
   const region = Object.prototype.hasOwnProperty.call(REGION_LABELS, requestedRegion)
     ? requestedRegion
     : "US";
-  if (!year) return NextResponse.json({ error: "year required" }, { status: 400 });
+  if (!Number.isFinite(year)) return NextResponse.json({ error: "year required" }, { status: 400 });
   const themes = getYearThemes(year, region, 5);
   const moods = getYearMoods(year, region, 4);
   const topEvent = all<TopEvent>(
@@ -44,17 +44,21 @@ export async function GET(req: Request) {
     topEvent: topEvent ? { name: topEvent.name, songCount: topEvent.song_count } : undefined,
   });
 
+  const audioPath = join(process.cwd(), "data", "exports", "insights", `insight-${year}-${region}.mp3`);
   let audioUrl: string | null = null;
-  if (process.env.ELEVENLABS_API_KEY) {
-    try {
-      const buf = await synthesizeSpeech(text);
-      const dir = join(process.cwd(), "data", "exports", "insights");
-      await mkdir(dir, { recursive: true });
-      const file = join(dir, `insight-${year}-${region}.mp3`);
-      await writeFile(file, buf);
-      audioUrl = `/api/insight/audio?year=${year}&region=${encodeURIComponent(region)}`;
-    } catch (err) {
-      console.warn("ElevenLabs synthesis failed:", (err as Error).message);
+  try {
+    await access(audioPath);
+    audioUrl = `/api/insight/audio?year=${year}&region=${encodeURIComponent(region)}`;
+  } catch {
+    if (process.env.ELEVENLABS_API_KEY) {
+      try {
+        const buf = await synthesizeSpeech(text);
+        await mkdir(join(process.cwd(), "data", "exports", "insights"), { recursive: true });
+        await writeFile(audioPath, buf);
+        audioUrl = `/api/insight/audio?year=${year}&region=${encodeURIComponent(region)}`;
+      } catch (err) {
+        console.warn("ElevenLabs synthesis failed:", (err as Error).message);
+      }
     }
   }
 

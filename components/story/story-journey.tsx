@@ -1,24 +1,14 @@
 // "Start the story" guided journey.
 //
-// Per external review (P1), the strongest paths through
-// VerseSignal should be choreographed, not discovered.
-// This component renders a hero CTA that walks the judge
-// through:
-//
-//   1. /lens/2020               — the year signal profile
-//   2. /event/...covid_19        — the COVID event
-//   3. /graph?root=...covid_19   — the COVID graph
-//   4. /song/...blinding-lights  — the strongest COVID song
-//
-// The journey is a sequence of `?step=N` URLs; the home
-// page renders the next-step CTA. Each step page (Lens,
-// Event, Graph) renders a "next: ..." footer pointing
-// at the next URL.
+// The home page now presents the guided flow as a
+// curated mosaic instead of a numbered list so the
+// launch surface feels like an editorial spread rather
+// than a catalog.
 
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { ArrowRight, Sparkles } from "lucide-react";
 
 export interface JourneyStep {
   step: number;
@@ -40,21 +30,21 @@ export const STORY_JOURNEY: JourneyStep[] = [
   },
   {
     step: 2,
-    title: "COVID-19 lockdowns",
+    title: "Candidate context: COVID-19 lockdowns",
     description:
-      "The world event that shaped 2020 chart music. See the per-event signal deltas: melancholic +203%, celebratory +103%, romantic -34%.",
+      "One possible explanation for the 2020 anomaly. See the signal deltas, then judge whether the event actually fits the songs.",
     href: "/event/versesignal:ev:covid_19",
     whyItMatters:
-      "Each event card now shows the signals that shifted during it, vs the prior 3-year baseline. The chart music data corroborates the cultural context.",
+      "Events are evidence checks, not starting assumptions. The page shows whether a real-world context is supported, overfit, or rejected.",
   },
   {
     step: 3,
-    title: "The COVID graph",
+    title: "Verification graph",
     description:
-      "The 2-hop neighborhood of COVID-19: every song, theme, entity, and event connected to the pandemic. Click any edge to see evidence.",
+      "A 2-hop neighborhood of the hypothesis: every song, theme, entity, and event connected to the candidate context. Click any edge to see evidence.",
     href: "/graph?rootType=event&rootId=versesignal%3An%3Aevent%3Aversesignal%3Aev%3Acovid_19&hops=2",
     whyItMatters:
-      "This is the most connective event in the corpus. The graph is now the secondary surface; the lens is the primary.",
+      "This is the secondary surface. It’s where we test and inspect the hypothesis after the song-led anomaly appears.",
   },
   {
     step: 4,
@@ -77,37 +67,107 @@ export const STORY_JOURNEY: JourneyStep[] = [
 ];
 
 export function StoryJourney() {
+  const [lead, ...rest] = STORY_JOURNEY;
+
   return (
-    <div className="card p-6">
-      <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-300">
-        The story
-      </h2>
-      <p className="mt-1 text-sm text-ink-400">
-        A 5-step guided walkthrough of what the data shows.
-      </p>
-      <ol className="mt-4 space-y-3">
-        {STORY_JOURNEY.map((s) => (
-          <li key={s.step}>
-            <Link
-              href={s.href}
-              className="group block rounded-lg border border-ink-800 bg-ink-900/40 p-3 transition hover:border-signal-500/50"
-            >
-              <div className="flex items-center gap-3">
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-signal-500 text-sm font-semibold text-ink-950">
-                  {s.step}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <h3 className="text-sm font-medium text-ink-100 group-hover:text-signal-300">
-                    {s.title}
-                  </h3>
-                  <p className="mt-0.5 text-xs text-ink-400">{s.description}</p>
-                </div>
-                <span className="text-ink-500 group-hover:text-signal-300">→</span>
-              </div>
-            </Link>
-          </li>
+    <section className="rounded-[2rem] border border-ink-800 bg-ink-900/55 p-6 lg:p-7">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="max-w-2xl">
+          <p className="text-xs uppercase tracking-[0.26em] text-ink-500">Guided route</p>
+          <h2 className="h-display mt-2 text-3xl md:text-4xl">Start with songs, then test the candidate context</h2>
+          <p className="mt-3 text-sm leading-6 text-ink-400">
+            The strongest path is choreographed here: song-led signal first, then candidate explanations,
+            then the graph and artist layers when the proof needs to be inspected.
+          </p>
+        </div>
+        <Link
+          href={lead.href}
+          className="inline-flex items-center gap-2 rounded-full border border-signal-500/40 bg-signal-950/20 px-4 py-2 text-sm font-semibold text-signal-100 transition hover:border-signal-400/60 hover:bg-signal-950/35"
+        >
+          Begin with 2020
+          <ArrowRight className="h-4 w-4" />
+        </Link>
+      </div>
+
+      <div className="mt-6 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+        <Link
+          href={lead.href}
+          className="group relative overflow-hidden rounded-[1.85rem] border border-ink-800 bg-[linear-gradient(160deg,rgba(11,12,18,0.96),rgba(9,11,17,0.84))] p-6 transition hover:-translate-y-0.5 hover:border-signal-400/40"
+        >
+          <div className="absolute inset-0 bg-gradient-to-br from-signal-500/20 via-signal-500/10 to-transparent" />
+          <div className="relative flex h-full flex-col gap-5">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs uppercase tracking-[0.24em] text-ink-500">Step 01</span>
+              <Sparkles className="h-4 w-4 text-signal-200" />
+            </div>
+            <div className="max-w-xl">
+              <h3 className="h-display text-3xl md:text-4xl">{lead.title}</h3>
+              <p className="mt-3 max-w-lg text-sm leading-6 text-ink-300">{lead.description}</p>
+            </div>
+            <p className="max-w-xl text-sm leading-6 text-signal-100/90">{lead.whyItMatters}</p>
+            <div className="mt-auto inline-flex items-center gap-2 text-sm font-semibold text-signal-200">
+              Open the first lens
+              <ArrowRight className="h-4 w-4" />
+            </div>
+          </div>
+        </Link>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          {rest.slice(0, 2).map((step) => (
+            <JourneyCard key={step.step} step={step} />
+          ))}
+          <div className="rounded-[1.85rem] border border-ink-800 bg-ink-950/55 p-5">
+            <p className="text-xs uppercase tracking-[0.24em] text-ink-500">Why this works</p>
+            <p className="mt-3 text-sm leading-6 text-ink-300">
+              The interface is now arranged like a path through the investigation, not a directory of
+              pages. Users can start fast, then peel back into graph evidence when they want more trust.
+            </p>
+          </div>
+          <div className="rounded-[1.85rem] border border-ink-800 bg-ink-950/55 p-5">
+            <p className="text-xs uppercase tracking-[0.24em] text-ink-500">Last stop</p>
+            <p className="mt-3 text-sm leading-6 text-ink-300">
+              The artist profile compresses the same evidence into a broader cultural reading, which
+              keeps the exploration loop open after the strongest song and event claims.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-4 md:grid-cols-3">
+        {rest.slice(2).map((step) => (
+          <JourneyCard key={step.step} step={step} compact />
         ))}
-      </ol>
-    </div>
+      </div>
+    </section>
+  );
+}
+
+function JourneyCard({ step, compact = false }: { step: JourneyStep; compact?: boolean }) {
+  return (
+    <Link
+      href={step.href}
+      className={`group relative overflow-hidden rounded-[1.5rem] border border-ink-800 bg-ink-950/55 p-5 transition hover:-translate-y-0.5 hover:border-signal-400/40 ${
+        compact ? "min-h-[11rem]" : ""
+      }`}
+    >
+      <div className="absolute inset-0 bg-gradient-to-br from-echo-500/10 via-transparent to-signal-500/10 opacity-0 transition group-hover:opacity-100" />
+      <div className="relative flex h-full flex-col">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs uppercase tracking-[0.22em] text-ink-500">Step {step.step}</span>
+          <span className="rounded-full border border-ink-700 bg-ink-900/80 px-2.5 py-0.5 text-[11px] text-ink-300">
+            story route
+          </span>
+        </div>
+        <h3 className="mt-4 text-lg font-semibold tracking-tight text-ink-50 text-balance">
+          {step.title}
+        </h3>
+        <p className="mt-2 text-sm leading-6 text-ink-300">{step.description}</p>
+        <p className="mt-4 text-xs leading-5 text-ink-500">{step.whyItMatters}</p>
+        <span className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-signal-200">
+          Open route
+          <ArrowRight className="h-4 w-4" />
+        </span>
+      </div>
+    </Link>
   );
 }

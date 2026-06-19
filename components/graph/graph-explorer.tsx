@@ -53,6 +53,26 @@ export function GraphExplorer() {
   const [error, setError] = useState<string | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<GraphEdge | null>(null);
   const [evidence, setEvidence] = useState<Evidence[]>([]);
+  const [graphPulse, setGraphPulse] = useState(false);
+  const [pathPulse, setPathPulse] = useState(false);
+  const [edgePulse, setEdgePulse] = useState(false);
+  const [discoveryMilestones, setDiscoveryMilestones] = useState<string[]>([]);
+  const [discoveryMessage, setDiscoveryMessage] = useState("Start a graph move.");
+
+  const discoveryCap = 5;
+  const discoveryScore = Math.min(discoveryMilestones.length, discoveryCap);
+
+  function unlockMilestone(key: string, message: string) {
+    setDiscoveryMilestones((prev) => {
+      if (prev.includes(key)) return prev;
+      const next = [...prev, key];
+      setDiscoveryMessage(message);
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("versesignal-discovery", JSON.stringify(next));
+      }
+      return next;
+    });
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -65,7 +85,11 @@ export function GraphExplorer() {
         );
         if (!res.ok) throw new Error(`Graph query failed: ${res.status}`);
         const json = (await res.json()) as GraphResponse;
-        if (!cancelled) setData(json);
+        if (!cancelled) {
+          setData(json);
+          setGraphPulse(true);
+          unlockMilestone("graph_loaded", "Neighborhood loaded. New territory unlocked.");
+        }
       } catch (err) {
         if (!cancelled) setError((err as Error).message);
       } finally {
@@ -79,15 +103,70 @@ export function GraphExplorer() {
   }, [rootId, hops, rootType]);
 
   useEffect(() => {
+    if (!graphPulse) return;
+    const timer = window.setTimeout(() => setGraphPulse(false), 900);
+    return () => window.clearTimeout(timer);
+  }, [graphPulse]);
+
+  useEffect(() => {
+    if (!pathPulse) return;
+    const timer = window.setTimeout(() => setPathPulse(false), 900);
+    return () => window.clearTimeout(timer);
+  }, [pathPulse]);
+
+  useEffect(() => {
+    if (!edgePulse) return;
+    const timer = window.setTimeout(() => setEdgePulse(false), 900);
+    return () => window.clearTimeout(timer);
+  }, [edgePulse]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const raw = window.localStorage.getItem("versesignal-discovery");
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw) as string[];
+      if (Array.isArray(parsed) && parsed.every((v) => typeof v === "string")) {
+        setDiscoveryMilestones(parsed.slice(0, discoveryCap));
+      }
+    } catch {
+      // keep empty
+    }
+  }, []);
+
+  useEffect(() => {
     if (!selectedEdge) {
       setEvidence([]);
       return;
     }
+    unlockMilestone("edge_selected", "You opened a graph edge. Time to inspect proof.");
     fetch(`/api/edge-evidence?edgeId=${encodeURIComponent(selectedEdge.id)}`)
       .then((r) => r.json())
-      .then((j: EvidenceResponse) => setEvidence(j.evidence ?? []))
+      .then((j: EvidenceResponse) => {
+        setEvidence(j.evidence ?? []);
+        if ((j.evidence ?? []).length > 0) {
+          unlockMilestone("evidence_loaded", "Evidence loaded. Trust your path.");
+          setEdgePulse(true);
+        }
+      })
       .catch(() => setEvidence([]));
   }, [selectedEdge]);
+
+  function jumpTo(route: string, milestone: string, message: string) {
+    router.push(route);
+    unlockMilestone(milestone, message);
+    setGraphPulse(true);
+  }
+
+  function onPathFound() {
+    setPathPulse(true);
+    unlockMilestone("path_found", "Discovery complete: shortest path found.");
+  }
+
+  function onSelectEdge(edge: GraphEdge) {
+    setSelectedEdge(edge);
+    unlockMilestone("edge_selected", "You opened a graph edge. Time to inspect proof.");
+  }
 
   const nodeCount = data?.nodes.length ?? 0;
   const edgeCount = data?.edges.length ?? 0;
@@ -115,33 +194,73 @@ export function GraphExplorer() {
       </p>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
+        <div className="mr-1">
+          <div className="mb-1 text-xs uppercase tracking-wider text-ink-500">Discovery Meter</div>
+          <div className="flex items-center gap-2">
+            <div className="h-2 w-44 overflow-hidden rounded-full bg-ink-800">
+              <div
+                className="h-full origin-left animate-micro-glow bg-gradient-to-r from-signal-500 to-echo-500 transition-[width] duration-500"
+                style={{ width: `${(discoveryScore / discoveryCap) * 100}%` }}
+              />
+            </div>
+            <span className="text-xs text-ink-300">{discoveryScore}/{discoveryCap}</span>
+          </div>
+          <p className="mt-1 text-[11px] text-ink-500">{discoveryMessage}</p>
+        </div>
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center gap-2">
         <span className="text-xs uppercase tracking-wider text-ink-500">Jump to:</span>
         <button
-          onClick={() => router.push(`/graph?rootType=year&rootId=versesignal:n:year:2020&hops=${hops}`)}
+          onClick={() =>
+            jumpTo(
+              `/graph?rootType=year&rootId=versesignal:n:year:2020&hops=${hops}`,
+              "jump_2020",
+              "Anchored at 2020 for a fast discovery run."
+            )
+          }
           className="pill pill-signal"
         >
           2020
         </button>
         <button
-          onClick={() => router.push(`/graph?rootType=event&rootId=versesignal:n:event:versesignal:ev:covid_19&hops=${hops}`)}
+          onClick={() =>
+            jumpTo(
+              `/graph?rootType=event&rootId=versesignal:n:event:versesignal:ev:covid_19&hops=${hops}`,
+              "jump_covid",
+              "Shifting to COVID event cluster."
+            )
+          }
           className="pill pill-echo"
         >
           COVID-19
         </button>
         <button
-          onClick={() => router.push(`/graph?rootType=event&rootId=versesignal:n:event:versesignal:ev:ukraine_war&hops=${hops}`)}
+          onClick={() =>
+            jumpTo(
+              `/graph?rootType=event&rootId=versesignal:n:event:versesignal:ev:ukraine_war&hops=${hops}`,
+              "jump_ukraine",
+              "Shifting to Ukraine war cluster."
+            )
+          }
           className="pill pill-echo"
         >
           Ukraine war
         </button>
         <button
-          onClick={() => router.push(`/graph?rootType=event&rootId=versesignal:n:event:versesignal:ev:blm_2020&hops=${hops}`)}
+          onClick={() =>
+            jumpTo(
+              `/graph?rootType=event&rootId=versesignal:n:event:versesignal:ev:blm_2020&hops=${hops}`,
+              "jump_blm",
+              "Shifting to BLM 2020 cluster."
+            )
+          }
           className="pill pill-echo"
         >
           BLM 2020
         </button>
         <button
-          onClick={() => router.push("/ask")}
+          onClick={() => jumpTo("/ask", "jump_ask", "Opening guided ask mode.")}
           className="pill pill-signal"
           type="button"
         >
@@ -151,7 +270,13 @@ export function GraphExplorer() {
         {[1, 2, 3].map((h) => (
           <button
             key={h}
-            onClick={() => router.push(`/graph?rootType=${rootType}&rootId=${encodeURIComponent(rootId)}&hops=${h}`)}
+            onClick={() =>
+              jumpTo(
+                `/graph?rootType=${rootType}&rootId=${encodeURIComponent(rootId)}&hops=${h}`,
+                `hops_${h}`,
+                `Expanding radius to ${h} hop${h === 1 ? "" : "s"}.`
+              )
+            }
             className={`pill ${h === hops ? "pill-signal" : "pill-mute"}`}
           >
             {h}
@@ -166,12 +291,14 @@ export function GraphExplorer() {
           ) : error ? (
             <div className="card flex h-[400px] items-center justify-center text-red-400 md:h-[640px]">{error}</div>
           ) : data ? (
-            <GraphView
-              rootId={data.root.id}
-              nodes={data.nodes}
-              edges={data.edges as unknown as import("@/lib/types").GraphEdge[]}
-              onSelectEdge={(e) => setSelectedEdge(e as unknown as GraphEdge | null)}
-            />
+            <div className={`transition-all duration-700 ${graphPulse ? "animate-graph-pulse" : ""}`}>
+              <GraphView
+                rootId={data.root.id}
+                nodes={data.nodes}
+                edges={data.edges as unknown as import("@/lib/types").GraphEdge[]}
+                onSelectEdge={(e) => onSelectEdge(e as unknown as GraphEdge)}
+              />
+            </div>
           ) : (
             <div className="card flex h-[400px] items-center justify-center text-ink-500 md:h-[640px]">Select a node to start.</div>
           )}
@@ -187,7 +314,7 @@ export function GraphExplorer() {
             </div>
           ) : null}
         </div>
-        <div className="space-y-4">
+        <div className={`space-y-4 ${edgePulse ? "animate-edge-pulse" : ""}`}>
           <EvidenceDrawer
             edge={selectedEdge}
             evidence={evidence}
@@ -196,8 +323,12 @@ export function GraphExplorer() {
         </div>
       </div>
 
-      <section className="mt-8">
-        <PathPanel />
+      <section className={`mt-8 ${pathPulse ? "animate-path-panel-pulse" : ""}`}>
+        <PathPanel
+          onPathFound={(result) => {
+            if (result.found) onPathFound();
+          }}
+        />
       </section>
     </main>
   );

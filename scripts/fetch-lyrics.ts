@@ -7,9 +7,7 @@
 import "dotenv/config";
 import { closeDb, getDb, initDb } from "../lib/db";
 import { all } from "../lib/db/sql";
-import { searchTrack, searchTrackByFields, ingestTrack, type MXMTrack } from "../lib/api/musixmatch";
-import { fetchLyricsFromGenius, isGeniusAvailable } from "../lib/api/genius";
-import { isProtectedArtist } from "../lib/db/protected-artists";
+import { fetchLyricsWithFallback, splitLyricsToLines } from "../lib/lyrics/fallback";
 
 const DELAY_MS = 400;
 
@@ -22,134 +20,8 @@ interface SongRow {
   year: number;
 }
 
-interface SongIdRow { song_id: string }
-
-type LyricSource = "musixmatch" | "genius";
-
-interface LyricFetchResult {
-  source: LyricSource;
-  plainLyrics: string;
-  musixmatchTrackId?: number;
-}
-
-function cleanArtist(s: string): string {
-  if (isProtectedArtist(s)) return s;
-  return s.replace(/\s+(?:feat\.?|featuring|ft\.?|&|and|with)\b.*$/i, "").trim();
-}
-
-function cleanTitle(s: string): string {
-  return s.replace(/\s+\(.*?\)\s*$/, "").trim();
-}
-
-async function findTrack(title: string, artist: string): Promise<MXMTrack | null> {
-  const cleanedArtist = cleanArtist(artist);
-  const cleanedTitle = cleanTitle(title);
-  try {
-    // Strategy 1: search by separate title + artist fields
-    // (this is what the Musixmatch UI uses and gives much cleaner results)
-    const byField = await searchTrackByFields(cleanedTitle, cleanedArtist, 8);
-    const m1 = byField.find((t) => trackMatches(t, cleanedTitle, cleanedArtist));
-    if (m1) return m1;
-    // Strategy 2: combined query (legacy)
-    const combined = await searchTrack(`${cleanedTitle} ${cleanedArtist}`, 8);
-    const m2 = combined.find((t) => trackMatches(t, cleanedTitle, cleanedArtist));
-    if (m2) return m2;
-    // Strategy 3: title only with strict verification
-    const titleOnly = await searchTrack(cleanedTitle, 8);
-    const m3 = titleOnly.find((t) => trackMatches(t, cleanedTitle, cleanedArtist));
-    if (m3) return m3;
-    console.warn(`  ! no verified match for "${title}" — ${cleanedArtist}`);
-    return null;
-  } catch (err) {
-    console.warn(`  search failed for "${title}" — ${cleanedArtist}: ${(err as Error).message}`);
-    return null;
-  }
-}
-
-async function fetchLyricsWithFallback(title: string, artist: string): Promise<LyricFetchResult | null> {
-  const track = await findTrack(title, artist);
-  if (track) {
-    try {
-      const ingested = await ingestTrack(track.track_id);
-      if (ingested.plainLyrics) {
-        return {
-          source: "musixmatch",
-          musixmatchTrackId: track.track_id,
-          plainLyrics: ingested.plainLyrics,
-        };
-      }
-    } catch (err) {
-      console.warn(`  musixmatch ingest failed: ${(err as Error).message}`);
-    }
-  }
-
-  if (!isGeniusAvailable()) return null;
-  const fallback = await fetchLyricsFromGenius(title, artist);
-  if (!fallback?.plainLyrics) return null;
-
-  return {
-    source: "genius",
-    plainLyrics: fallback.plainLyrics,
-  };
-}
-
-// True if the Musixmatch result's artist name matches the
-// cleanedArtist we expected. Uses bidirectional substring match
-// so "Drake" matches "Drake" or "Aubrey Drake Graham", and
-// "Bebe Rexha" matches "Bebe Rexha featuring Florida Georgia Line"
-// (we accept the prefix).
-function artistMatches(foundArtist: string, expected: string): boolean {
-  const f = foundArtist.toLowerCase().trim();
-  const e = expected.toLowerCase().trim();
-  if (!f || !e) return false;
-  if (f === e) return true;
-  // Split on "feat./ft./&/and/with" so "Drake" matches "Drake feat. X"
-  const fPrimary = f.split(/\s+(?:feat\.?|featuring|ft\.?|&|\band\b|\bwith\b)\b/i)[0]!.trim();
-  const ePrimary = e.split(/\s+(?:feat\.?|featuring|ft\.?|&|\band\b|\bwith\b)\b/i)[0]!.trim();
-  if (!fPrimary || !ePrimary) return false;
-  if (fPrimary === ePrimary) return true;
-  // Allow prefix if one is fully contained in the other
-  if (fPrimary.includes(ePrimary) || ePrimary.includes(fPrimary)) {
-    return fPrimary.length >= 2 && ePrimary.length >= 2;
-  }
-  return false;
-}
-
-// Loose title match: ignore differences in parens (e.g., "Remix"),
-// and require either exact or substring match (>= 4 chars).
-function titleMatches(foundTitle: string, expected: string): boolean {
-  const f = foundTitle.toLowerCase().replace(/\s+\(.*?\)\s*/g, "").trim();
-  const e = expected.toLowerCase().replace(/\s+\(.*?\)\s*/g, "").trim();
-  if (!f || !e) return false;
-  if (f === e) return true;
-  // Allow substring match with min length to avoid "Hit" matching "Hitchhiker".
-  if (f.length >= 4 && e.length >= 4) {
-    if (f.includes(e) || e.includes(f)) return true;
-  }
-  return false;
-}
-
-function trackMatches(track: MXMTrack, title: string, artist: string): boolean {
-  return titleMatches(track.track_name, title) && artistMatches(track.artist_name, artist);
-}
-
-function splitLines(lyrics: string): { text: string; section: string | null }[] {
-  const lines = lyrics
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
-
-  const out: { text: string; section: string | null }[] = [];
-  let currentSection: string | null = null;
-  for (const line of lines) {
-    const bracket = line.match(/^\[(.*?)\]$/);
-    if (bracket) {
-      currentSection = bracket[1]!.toLowerCase();
-      continue;
-    }
-    out.push({ text: line, section: currentSection });
-  }
-  return out;
+interface SongIdRow {
+  song_id: string;
 }
 
 async function main() {
@@ -185,14 +57,9 @@ async function main() {
       await sleep(DELAY_MS);
       continue;
     }
-    if (fetched.source === "musixmatch") {
-      const trackId = fetched.musixmatchTrackId;
-      if (!trackId) {
-        fail++;
-        await sleep(DELAY_MS);
-        continue;
-      }
-      insertTrackId.run(trackId, s.id);
+
+    if (fetched.source === "musixmatch" && fetched.musixmatchTrackId) {
+      insertTrackId.run(fetched.musixmatchTrackId, s.id);
     }
 
     if (!fetched.plainLyrics) {
@@ -201,8 +68,9 @@ async function main() {
       await sleep(DELAY_MS);
       continue;
     }
+
     try {
-      const lines = splitLines(fetched.plainLyrics);
+      const lines = splitLyricsToLines(fetched.plainLyrics);
       for (let li = 0; li < lines.length; li++) {
         const id = `versesignal:ll:${s.id}:${li}`;
         insertLine.run(id, s.id, li, lines[li]!.text, lines[li]!.section);

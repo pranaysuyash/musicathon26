@@ -65,5 +65,8 @@ yarn-error.log*
 *.swp
 .cursor/
 
+# Playwright MCP/runtime tooling
+.playwright-mcp/
+
 # Agent-start compatibility mirror (regenerated each session; canonical is docs/context/agent-start/)
 .agent/

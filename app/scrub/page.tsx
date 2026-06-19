@@ -138,6 +138,28 @@ export default function ScrubPage({
           </Link>
         </div>
 
+        {/* Era quick-jumps: 1960s, 1970s, 1980s, 1990s, 2000s, 2010s, 2020s */}
+        <div className="mb-4 flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-ink-500">Era:</span>
+          {[
+            { label: "1960s", years: [1960, 1969] },
+            { label: "1970s", years: [1970, 1979] },
+            { label: "1980s (MTV)", years: [1980, 1989] },
+            { label: "1990s", years: [1990, 1999] },
+            { label: "2000s (digital)", years: [2000, 2009] },
+            { label: "2010s (streaming)", years: [2010, 2019] },
+            { label: "2020s (global)", years: [2020, 2023] },
+          ].map((era) => (
+            <Link
+              key={era.label}
+              href={buildLangPath(`/lens/${era.years[0]}?region=${region}`, locale)}
+              className="rounded-full border border-ink-700 px-2.5 py-0.5 text-ink-200 hover:border-signal-300/70 hover:text-signal-200"
+            >
+              {era.label}
+            </Link>
+          ))}
+        </div>
+
         {allYears.length > 0 ? (
           <TimelineScrubber years={allYears} currentYear={currentYear} />
         ) : (

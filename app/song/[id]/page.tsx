@@ -27,12 +27,13 @@ export async function generateMetadata({
   };
 }
 import { initDb } from "@/lib/db";
-import { all } from "@/lib/db/sql";
+import { all, run } from "@/lib/db/sql";
 import { Pill, SectionTitle, ConfidenceBar } from "@/components/ui/primitives";
 import { BecauseCard } from "@/components/evidence/because-card";
 import { THEME_LABELS, THEME_COLORS } from "@/lib/nlp/theme-scoring";
 import type { Theme } from "@/lib/types";
 import type { EvidencePreviewItem } from "@/components/evidence/evidence-preview";
+import { fetchLyricsWithFallback, splitLyricsToLines } from "@/lib/lyrics/fallback";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +43,59 @@ function decodeRouteParam(value: string): string {
   } catch {
     return value;
   }
+}
+
+/** Break a line of lyrics into segments, marking where each entity's
+ * surface form appears so the UI can highlight it. The match is
+ * case-insensitive and finds the first occurrence of each surface form
+ * (entities can have multiple surface forms across the lyric line;
+ * here we use the one we have for that line_index). */
+function annotateWithEntities(
+  text: string,
+  entities: EntityRow[]
+): { text: string; entity: EntityRow | null }[] {
+  if (entities.length === 0) return [{ text, entity: null }];
+
+  // Build list of match positions across the line.
+  const matches: { start: number; end: number; entity: EntityRow }[] = [];
+  for (const ent of entities) {
+    if (!ent.surface_form) continue;
+    const sf = ent.surface_form.trim();
+    if (!sf) continue;
+    const idx = text.toLowerCase().indexOf(sf.toLowerCase());
+    if (idx === -1) continue;
+    matches.push({ start: idx, end: idx + sf.length, entity: ent });
+  }
+  if (matches.length === 0) return [{ text, entity: null }];
+
+  // Sort by start position; for overlaps, keep the longer match.
+  matches.sort((a, b) => a.start - b.start);
+  const nonOverlap: typeof matches = [];
+  let lastEnd = -1;
+  for (const m of matches) {
+    if (m.start >= lastEnd) {
+      nonOverlap.push(m);
+      lastEnd = m.end;
+    } else if (m.end - m.start > lastEnd - nonOverlap[nonOverlap.length - 1]!.start) {
+      // Replace the previous match with this longer one.
+      nonOverlap[nonOverlap.length - 1] = m;
+      lastEnd = m.end;
+    }
+  }
+
+  const segments: { text: string; entity: EntityRow | null }[] = [];
+  let cursor = 0;
+  for (const m of nonOverlap) {
+    if (m.start > cursor) {
+      segments.push({ text: text.slice(cursor, m.start), entity: null });
+    }
+    segments.push({ text: text.slice(m.start, m.end), entity: m.entity });
+    cursor = m.end;
+  }
+  if (cursor < text.length) {
+    segments.push({ text: text.slice(cursor), entity: null });
+  }
+  return segments;
 }
 
 interface PageProps {
@@ -63,7 +117,39 @@ interface EventLinkRow {
   evidence_sources: string | null;
 }
 
-export default function SongPage({ params }: PageProps) {
+async function hydrateMissingLyrics(songId: string, title: string, artist: string): Promise<LyricRow[]> {
+  const fetched = await fetchLyricsWithFallback(title, artist);
+  if (!fetched) return [];
+  const lines = splitLyricsToLines(fetched.plainLyrics);
+  if (lines.length === 0) return [];
+
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    const line = lines[lineIndex];
+    if (!line) continue;
+    run(
+      `INSERT OR REPLACE INTO lyric_lines (id, song_id, line_index, text, section)
+       VALUES (?, ?, ?, ?, ?)`,
+      `versesignal:ll:${songId}:${lineIndex}`,
+      songId,
+      lineIndex,
+      line.text,
+      line.section
+    );
+  }
+
+  if (fetched.source === "musixmatch" && fetched.musixmatchTrackId) {
+    run(`UPDATE songs SET musixmatch_track_id = ? WHERE id = ?`, fetched.musixmatchTrackId, songId);
+  }
+
+  return lines.map((line, lineIndex) => ({
+    line_index: lineIndex,
+    text: line.text,
+    section: line.section,
+    has_named_entity: 0,
+  }));
+}
+
+export default async function SongPage({ params }: PageProps) {
   const cspNonce = headers().get("X-CSP-Nonce") ?? undefined;
   initDb();
   // Resolve legacy song IDs (e.g., the pre-canonical-migration "gods-plan-drake"
@@ -102,6 +188,9 @@ export default function SongPage({ params }: PageProps) {
     `SELECT line_index, text, section, has_named_entity FROM lyric_lines WHERE song_id = ? ORDER BY line_index`,
     song.id
   );
+  const hydratedLyrics =
+    lyrics.length === 0 ? await hydrateMissingLyrics(song.id, song.title, song.artist) : [];
+  const lines = lyrics.length === 0 ? hydratedLyrics : lyrics;
 
   const similarSongs = getSimilarSongs(song.id, 6);
 
@@ -162,22 +251,39 @@ export default function SongPage({ params }: PageProps) {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
           <section>
-            <SectionTitle>Lyrics ({lyrics.length} lines)</SectionTitle>
+      <SectionTitle>Lyrics ({lines.length} lines)</SectionTitle>
             <div className="card max-h-[600px] overflow-y-auto p-5 scrollbar-thin">
-              {lyrics.length === 0 ? (
+              {lines.length === 0 ? (
                 <p className="text-sm text-ink-500">
                   No lyrics ingested yet. Run <code className="font-mono">npm run db:fetch-lyrics</code>.
                 </p>
               ) : (
                 <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-ink-200">
-                  {lyrics.map((l) => {
+                  {lines.map((l) => {
                     const entOnLine = entitiesByLine.get(l.line_index) ?? [];
+                    // Build inline highlights: for each entity on this
+                    // line, find its surface form substring (case-insensitive)
+                    // and wrap it in a span. We sort by start position
+                    // so highlights are rendered in order.
+                    const segments = annotateWithEntities(l.text, entOnLine);
                     return (
-                      <span key={l.line_index} className="block">
+                      <span key={l.line_index} className="block hover:bg-ink-900/30 transition-colors">
                         <span className="mr-3 inline-block w-8 text-right text-[10px] tabular-nums text-ink-500">
                           {l.line_index}
                         </span>
-                        <span className={entOnLine.length > 0 ? "bg-echo-900/20" : ""}>{l.text}</span>
+                        {segments.map((seg, i) =>
+                          seg.entity ? (
+                            <span
+                              key={i}
+                              className="rounded bg-echo-500/20 px-0.5 text-echo-200 cursor-help border-b border-dotted border-echo-400/40"
+                              title={`${seg.entity.canonical_name} (${seg.entity.entity_type})`}
+                            >
+                              {seg.text}
+                            </span>
+                          ) : (
+                            <span key={i}>{seg.text}</span>
+                          )
+                        )}
                       </span>
                     );
                   })}
@@ -379,7 +485,7 @@ export default function SongPage({ params }: PageProps) {
                     {e.explanation ? <p className="mt-1 text-ink-500 italic">{e.explanation}</p> : null}
                     <div className="mt-2">
                       <BecauseCard
-                        claim={`${song.title} ↔ ${e.event_name}`}
+                        claim={`${song.title} → ${e.event_name}`}
                         reasons={[
                           e.explanation ?? "Connection is inferred from song-event linkage.",
                           `Weight ${(e.weight * 100).toFixed(0)}%.`,

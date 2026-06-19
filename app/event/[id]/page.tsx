@@ -179,7 +179,7 @@ export default function EventPage({ params, searchParams }: PageProps) {
                 </div>
                 <div className="mt-2 ml-11">
                   <BecauseCard
-                    claim={`${row.title} ↔ ${event.name}`}
+                    claim={`${row.title} → ${event.name}`}
                     reasons={[
                       row.edge.explanation
                         ? row.edge.explanation
