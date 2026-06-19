@@ -20,18 +20,37 @@ const REGIONS: { code: string; label: string }[] = [
 export function RegionPicker({
   currentRegion,
   currentYear,
+  basePath,
+  locale,
 }: {
   currentRegion: string;
   currentYear: number;
+  basePath?: string;
+  locale?: string;
 }) {
   const router = useRouter();
+  const query = new URLSearchParams();
+  if (locale && locale !== "en") {
+    query.set("lang", locale);
+  }
+  if (currentRegion !== "US") {
+    query.set("region", currentRegion);
+  }
 
   return (
     <select
       value={currentRegion}
       onChange={(e) => {
         const v = e.target.value;
-        router.push(`/lens/${currentYear}${v !== "US" ? `?region=${v}` : ""}`);
+        const nextQuery = new URLSearchParams(query);
+        if (v === "US") {
+          nextQuery.delete("region");
+        } else {
+          nextQuery.set("region", v);
+        }
+        const path = basePath ?? `/lens/${currentYear}`;
+        const queryString = nextQuery.toString();
+        router.push(queryString ? `${path}?${queryString}` : path);
       }}
       className="rounded-lg border border-ink-700 bg-ink-900 px-2.5 py-1.5 text-xs text-ink-200 outline-none focus:border-signal-500"
     >

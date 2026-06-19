@@ -25,6 +25,15 @@ export async function generateMetadata({ params }: { params: { artist: string } 
   return {
     title: `${artist.canonicalName} — Artist profile`,
     description: `Songs, themes, and event links for ${artist.canonicalName} in VerseSignal.`,
+    openGraph: {
+      images: [
+        {
+          url: `/api/og?type=artist&title=${encodeURIComponent(artist.canonicalName)}&subtitle=${encodeURIComponent(`Songs and cultural signals for ${artist.canonicalName}`)}`,
+          width: 1200,
+          height: 630,
+        },
+      ],
+    },
   };
 }
 
@@ -39,7 +48,7 @@ export default function ArtistPage({ params }: { params: { artist: string } }) {
   const artist = getArtistProfile(decodeRouteParam(params.artist));
   if (!artist) notFound();
 
-  const songs = getArtistSongs(artist.canonicalName, 80);
+  const songs = getArtistSongs(artist.canonicalName, 100);
   const themes = getArtistThemeSignals(artist.canonicalName, 16);
   const events = getArtistEventLinks(artist.canonicalName, 16);
 
@@ -72,7 +81,7 @@ export default function ArtistPage({ params }: { params: { artist: string } }) {
           {songs.length === 0 ? (
             <li className="p-4 text-sm text-ink-500">No dataset songs found for this artist yet.</li>
           ) : (
-            songs.slice(0, 50).map((song) => (
+            songs.slice(0, 100).map((song) => (
               <li key={song.songId} className="flex items-center gap-3 p-3 text-sm">
                 <span className="w-10 text-right text-base font-semibold tabular-nums text-ink-500">
                   {song.chartRank ? song.chartRank : "—"}

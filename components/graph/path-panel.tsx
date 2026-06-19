@@ -218,7 +218,7 @@ export function PathPanel({ initialFromId, initialToId, initialAsk }: Props) {
         </label>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <button
-            onClick={runAsk}
+            onClick={() => runAsk()}
             disabled={loading || !askInput.trim()}
             className="rounded-lg bg-signal-500 px-4 py-2 text-sm font-medium text-ink-950 transition hover:bg-signal-400 disabled:cursor-not-allowed disabled:opacity-50"
           >

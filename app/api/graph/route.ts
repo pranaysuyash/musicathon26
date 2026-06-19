@@ -7,7 +7,7 @@ import { parse, GraphQuery } from "@/lib/api-schemas";
 
 export const dynamic = "force-dynamic";
 
-const DEFAULT_GRAPH_ROOT = "versesignal:year:2020";
+const DEFAULT_GRAPH_ROOT = "versesignal:n:year:2020";
 const SONG_NODE_PREFIX = "versesignal:n:song:";
 const EVENT_NODE_PREFIX = "versesignal:n:event:";
 const YEAR_NODE_PREFIX = "versesignal:n:year:";
@@ -49,7 +49,7 @@ export async function GET(req: Request) {
   if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
   const requested = canonicalNodeFromQuery(parsed.data.nodeId ?? null, rootType);
-  const fallbackNodeId = `${YEAR_NODE_PREFIX}${DEFAULT_GRAPH_ROOT.slice("versesignal:year:".length)}`;
+  const fallbackNodeId = DEFAULT_GRAPH_ROOT;
   const resolvedNodeId = requested ?? fallbackNodeId;
   let root = getGraphNode(resolvedNodeId);
   if (!root && resolvedNodeId !== fallbackNodeId) {

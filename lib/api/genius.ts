@@ -4,6 +4,7 @@
 // - if scraping fails, it falls back to null without breaking the main pipeline
 
 import { URL } from "node:url";
+import { isProtectedArtist } from "../db/protected-artists";
 
 interface GeniusSearchResponse {
   response: {
@@ -93,7 +94,7 @@ export async function fetchLyricsFromGenius(title: string, artist: string): Prom
   if (!token) return null;
 
   const cleanedTitle = title.replace(/\s+\(.*?\)\s*$/g, "").trim();
-  const cleanedArtist = artist.replace(/\s+(?:feat\.?|featuring|ft\.?|&|and|with)\b.*$/i, "").trim();
+  const cleanedArtist = isProtectedArtist(artist) ? artist : artist.replace(/\s+(?:feat\.?|featuring|ft\.?|&|and|with)\b.*$/i, "").trim();
 
   try {
     const search = await call<GeniusSearchResponse>("search", {

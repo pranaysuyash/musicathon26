@@ -7,8 +7,9 @@
 import "dotenv/config";
 import { closeDb, getDb, initDb } from "../lib/db";
 import { all } from "../lib/db/sql";
-import { searchTrack, ingestTrack, type MXMTrack } from "../lib/api/musixmatch";
+import { searchTrack, searchTrackByFields, ingestTrack, type MXMTrack } from "../lib/api/musixmatch";
 import { fetchLyricsFromGenius, isGeniusAvailable } from "../lib/api/genius";
+import { isProtectedArtist } from "../lib/db/protected-artists";
 
 const DELAY_MS = 400;
 
@@ -32,6 +33,7 @@ interface LyricFetchResult {
 }
 
 function cleanArtist(s: string): string {
+  if (isProtectedArtist(s)) return s;
   return s.replace(/\s+(?:feat\.?|featuring|ft\.?|&|and|with)\b.*$/i, "").trim();
 }
 
@@ -43,23 +45,21 @@ async function findTrack(title: string, artist: string): Promise<MXMTrack | null
   const cleanedArtist = cleanArtist(artist);
   const cleanedTitle = cleanTitle(title);
   try {
-    // First try title + artist
-    const direct = await searchTrack(`${cleanedTitle} ${cleanedArtist}`, 5);
-    // Per 0.6 blast-radius + 0.10 observability: verify the artist
-    // name actually matches the result before accepting. Previously
-    // this script took `direct[0]` blindly, which is why songs like
-    // "Meant to Be" (Bebe Rexha) and "The Middle" (Zedd) ended up
-    // with identical wrong lyrics.
-    const verified = direct.find((t) => artistMatches(t.artist_name, cleanedArtist));
-    if (verified) return verified;
-    // Fallback: title only, but also with artist verification
-    const loose = await searchTrack(cleanedTitle, 5);
-    const match = loose.find((t) => artistMatches(t.artist_name, cleanedArtist));
-    if (match) return match;
-    // Last resort: take the top result with a warning so the
-    // data-quality guard in build-similar-edges.py can catch it.
-    console.warn(`  ! no artist match for "${title}" — ${cleanedArtist}; using top result (${direct[0]?.artist_name ?? loose[0]?.artist_name ?? "?"})`);
-    return direct[0] ?? loose[0] ?? null;
+    // Strategy 1: search by separate title + artist fields
+    // (this is what the Musixmatch UI uses and gives much cleaner results)
+    const byField = await searchTrackByFields(cleanedTitle, cleanedArtist, 8);
+    const m1 = byField.find((t) => trackMatches(t, cleanedTitle, cleanedArtist));
+    if (m1) return m1;
+    // Strategy 2: combined query (legacy)
+    const combined = await searchTrack(`${cleanedTitle} ${cleanedArtist}`, 8);
+    const m2 = combined.find((t) => trackMatches(t, cleanedTitle, cleanedArtist));
+    if (m2) return m2;
+    // Strategy 3: title only with strict verification
+    const titleOnly = await searchTrack(cleanedTitle, 8);
+    const m3 = titleOnly.find((t) => trackMatches(t, cleanedTitle, cleanedArtist));
+    if (m3) return m3;
+    console.warn(`  ! no verified match for "${title}" — ${cleanedArtist}`);
+    return null;
   } catch (err) {
     console.warn(`  search failed for "${title}" — ${cleanedArtist}: ${(err as Error).message}`);
     return null;
@@ -113,6 +113,24 @@ function artistMatches(foundArtist: string, expected: string): boolean {
     return fPrimary.length >= 2 && ePrimary.length >= 2;
   }
   return false;
+}
+
+// Loose title match: ignore differences in parens (e.g., "Remix"),
+// and require either exact or substring match (>= 4 chars).
+function titleMatches(foundTitle: string, expected: string): boolean {
+  const f = foundTitle.toLowerCase().replace(/\s+\(.*?\)\s*/g, "").trim();
+  const e = expected.toLowerCase().replace(/\s+\(.*?\)\s*/g, "").trim();
+  if (!f || !e) return false;
+  if (f === e) return true;
+  // Allow substring match with min length to avoid "Hit" matching "Hitchhiker".
+  if (f.length >= 4 && e.length >= 4) {
+    if (f.includes(e) || e.includes(f)) return true;
+  }
+  return false;
+}
+
+function trackMatches(track: MXMTrack, title: string, artist: string): boolean {
+  return titleMatches(track.track_name, title) && artistMatches(track.artist_name, artist);
 }
 
 function splitLines(lyrics: string): { text: string; section: string | null }[] {

@@ -23,7 +23,7 @@ const ROUTES: RouteSpec[] = [
   { path: "/", expectStatus: 200, expectInBody: ["VerseSignal"] },
   { path: "/graph", expectStatus: 200, skipBodyCheck: true }, // empty default
   { path: "/year/2020", expectStatus: 200, expectInBody: ["2020"] },
-  { path: "/song/versesignal:2018:01:gods-plan-drake", expectStatus: 200, expectInBody: ["Drake"] },
+  { path: "/song/versesignal:2018:01:god-s-plan-drake", expectStatus: 200, expectInBody: ["Drake"] },
   { path: "/event/versesignal:ev:covid_19", expectStatus: 200, expectInBody: ["COVID-19"] },
   { path: "/lens/2020", expectStatus: 200, expectInBody: ["2020"] },
   { path: "/lens/2018", expectStatus: 200 },
@@ -35,6 +35,7 @@ const ROUTES: RouteSpec[] = [
   { path: "/api/song?id=versesignal:2020:01:blinding-lights-the-weeknd", expectStatus: 200, expectInBody: ["eventLinks", "themes"] },
   { path: "/api/health", expectStatus: 200, expectInBody: ["versesignal", "stats", "partner_keys"] },
   { path: "/api/year-signals?year=2020&region=US", expectStatus: 200, expectInBody: ["signals", "2020"] },
+  { path: "/data-health", expectStatus: 200, skipBodyCheck: true },
 ];
 
 // 4 path presets per the PathPanel in components/graph/path-panel.tsx
@@ -51,7 +52,7 @@ const PATH_PRESETS: Array<{ label: string; from: string; to: string }> = [
   },
   {
     label: "God's Plan → violence (theme)",
-    from: "versesignal:n:song:versesignal:2018:01:gods-plan-drake",
+    from: "versesignal:n:song:versesignal:2018:01:god-s-plan-drake",
     to: "versesignal:n:theme:violence",
   },
   {
@@ -65,13 +66,14 @@ let serverUp = false;
 
 beforeAll(async () => {
   // Quick probe to see if the dev server is up
+  // Allow 5s: first request triggers Next.js compile (~2s) + tailwind setup
   try {
-    const res = await fetch(BASE + "/", { signal: AbortSignal.timeout(2000) });
+    const res = await fetch(BASE + "/", { signal: AbortSignal.timeout(5000) });
     serverUp = res.status === 200;
   } catch {
     serverUp = false;
   }
-}, 5000);
+}, 8000);
 
 describe("Smoke tests: 9 important routes", () => {
   for (const r of ROUTES) {

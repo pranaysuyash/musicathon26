@@ -1,14 +1,14 @@
 import type { MetadataRoute } from "next";
-import { getAllSongs, getAllEvents } from "@/lib/db/queries";
+import { getAllSongs, getAllEvents, getAllYears } from "@/lib/db/queries";
 import { THEME_LABELS } from "@/lib/nlp/theme-scoring";
 
 const BASE = process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000";
-const YEARS = [2018, 2019, 2020, 2021, 2022, 2023];
 const THEMES = Object.keys(THEME_LABELS);
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const songs = getAllSongs();
   const events = getAllEvents();
+  const years = getAllYears("GLOBAL");
   const now = new Date();
   return [
     {
@@ -29,14 +29,14 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "yearly" as const,
       priority: 0.6,
     })),
-    ...YEARS.map((y) => ({
-      url: `${BASE}/year/${y}`,
+    ...years.map(({ year }) => ({
+      url: `${BASE}/year/${year}`,
       lastModified: now,
       changeFrequency: "yearly" as const,
       priority: 0.5,
     })),
-    ...YEARS.map((y) => ({
-      url: `${BASE}/lens/${y}`,
+    ...years.map(({ year }) => ({
+      url: `${BASE}/lens/${year}`,
       lastModified: now,
       changeFrequency: "yearly" as const,
       priority: 0.6,

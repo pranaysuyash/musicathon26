@@ -11,7 +11,7 @@ export function middleware(_request: NextRequest) {
   const response = NextResponse.next();
   const csp = [
     "default-src 'self'",
-    `script-src 'self' 'unsafe-inline' 'unsafe-eval' 'nonce-${nonce}'`,
+    `script-src 'self' 'nonce-${nonce}'`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "font-src 'self' data:",

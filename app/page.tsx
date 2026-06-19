@@ -3,6 +3,11 @@ import type { Metadata } from "next";
 import { getAllEvents, getAllYears } from "@/lib/db/queries";
 import { initDb } from "@/lib/db";
 import { StoryJourney } from "@/components/story/story-journey";
+import { t, resolveLocale, localePairs, type Locale } from "@/lib/i18n/strings";
+
+function buildLangPath(path: string, locale: Locale) {
+  return locale === "en" ? path : `${path}?lang=${locale}`;
+}
 
 export const metadata: Metadata = {
   title: "Songs by year, themes, and world events",
@@ -14,13 +19,34 @@ export const metadata: Metadata = {
 };
 export const dynamic = "force-dynamic";
 
-export default function Home() {
+export default function Home({
+  searchParams,
+}: {
+  searchParams: { lang?: string };
+}) {
   initDb();
+  const locale = resolveLocale(searchParams.lang);
   const events = getAllEvents();
   const yearCounts = getAllYears("US");
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-12">
+      <section className="mb-4 flex flex-wrap gap-2 text-xs">
+        {localePairs.map(({ code, key }) => (
+          <a
+            key={code}
+            href={buildLangPath("/", code)}
+            className={`rounded-full border px-2.5 py-1 transition ${
+              locale === code
+                ? "border-signal-300 bg-signal-300/10 text-signal-200"
+                : "border-ink-700 text-ink-400 hover:border-signal-300/70 hover:text-signal-200"
+            }`}
+          >
+            {t(locale, key)}
+          </a>
+        ))}
+      </section>
+
       <header className="mb-16">
         <div className="flex items-center gap-3 text-xs text-ink-400">
           <span className="pill pill-signal">VerseSignal</span>
@@ -28,61 +54,53 @@ export default function Home() {
           <span>VerseSignal demo lane is live.</span>
         </div>
         <h1 className="h-display mt-6 text-5xl font-semibold leading-[1.05] md:text-7xl">
-          When the world was going
-          <br />
-          through something,{" "}
-          <span className="gradient-text">what was it singing?</span>
+          {t(locale, "home.hero-subtitle")}
         </h1>
         <p className="mt-6 max-w-2xl text-lg text-ink-300 text-pretty">
-          VerseSignal is a long-term cultural music atlas: target scope is 1960s–2023,
-          staged by chart era. The shipped demo slice is 2018–2023.
+          {t(locale, "home.description")}
           Every song connects to lyrics, themes, named entities, moods, collaborators, and the
           world events that overlapped its chart window. Every edge carries evidence and a
           confidence score.
         </p>
         <p className="mt-3 max-w-2xl text-sm text-ink-400">
-          Era strategy:
-          1960s–1970s (US chart-memory mode),
-          1980s–1990s (US + MTV/radio-era enrichment),
-          2000s–2010s (US chart transition to streaming),
-          2020–2023 (Billboard Global 200 + streaming-era context).
+          {t(locale, "home.era-strategy")}
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
           <Link
-            href="/year/2020"
+            href={buildLangPath("/year/2020", locale)}
             className="rounded-lg bg-signal-500 px-5 py-2.5 text-sm font-medium text-ink-950 transition hover:bg-signal-400"
           >
-            See 2020 as a graph →
+            {t(locale, "home.pick-year")}
           </Link>
           <Link
-            href="/event/versesignal:ev:covid_19"
+            href={locale === "en" ? "/event/versesignal:ev:covid_19" : `/event/versesignal:ev:covid_19?lang=${locale}`}
             className="rounded-lg border border-ink-700 bg-ink-800/60 px-5 py-2.5 text-sm font-medium text-ink-100 transition hover:border-ink-600 hover:bg-ink-800"
           >
-            Explore COVID-19 lens
+            {t(locale, "home.pick-event")}
           </Link>
           <Link
-            href="/graph"
+            href={buildLangPath("/graph", locale)}
             className="rounded-lg border border-ink-700 bg-ink-800/60 px-5 py-2.5 text-sm font-medium text-ink-100 transition hover:border-ink-600 hover:bg-ink-800"
           >
-            Open Graph Explorer
+            {t(locale, "home.nav.graph")}
           </Link>
           <Link
-            href="/ask"
+            href={buildLangPath("/ask", locale)}
             className="rounded-lg border border-ink-700 bg-ink-800/60 px-5 py-2.5 text-sm font-medium text-ink-100 transition hover:border-ink-600 hover:bg-ink-800"
           >
-            Ask the Graph
+            {t(locale, "home.nav.ask")}
           </Link>
           <Link
-            href="/globe"
+            href={buildLangPath("/globe", locale)}
             className="rounded-lg border border-ink-700 bg-ink-800/60 px-5 py-2.5 text-sm font-medium text-ink-100 transition hover:border-ink-600 hover:bg-ink-800"
           >
-            Cultural Weather Map
+            {t(locale, "home.nav.globe")}
           </Link>
           <Link
-            href="/scrub"
+            href={buildLangPath("/scrub", locale)}
             className="rounded-lg border border-ink-700 bg-ink-800/60 px-5 py-2.5 text-sm font-medium text-ink-100 transition hover:border-ink-600 hover:bg-ink-800"
           >
-            Timeline Scrubber
+            {t(locale, "home.nav.scrub")}
           </Link>
         </div>
       </header>

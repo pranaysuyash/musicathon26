@@ -149,6 +149,20 @@ CREATE TABLE IF NOT EXISTS events (
   severity REAL DEFAULT 1.0                -- 0..1 visibility/impact
 );
 
+-- Optional curated article links for events (used by /event/[id]/articles)
+CREATE TABLE IF NOT EXISTS event_articles (
+  id TEXT PRIMARY KEY,                     -- versesignal:ea:<slug>
+  event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  source TEXT NOT NULL,                    -- e.g. 'Wikidata', 'Britannica', 'News API'
+  source_url TEXT NOT NULL,                -- canonical external article URL
+  title TEXT NOT NULL,
+  published_at TEXT,
+  summary TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_event_articles_event ON event_articles(event_id);
+
 -- ============================================================
 -- Graph edges (the product's core abstraction)
 -- Every edge has type, weight, confidence, source, and references evidence.
@@ -173,6 +187,8 @@ CREATE TABLE IF NOT EXISTS graph_edges (
   evidence_ids_json TEXT,                  -- JSON array of evidence IDs
   source_api TEXT NOT NULL,                -- musixmatch | songstats | gliner | embedding | llm | cyanite | lexic
   model_version TEXT,
+  inference_type TEXT,                     -- direct_lyric_reference | theme_overlap | temporal_alignment | embedding_similarity | manual_curation | ...
+  matched_terms_json TEXT,                 -- JSON array of matched terms used for this inference
   explanation TEXT,                        -- human-readable "why"
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -387,5 +403,3 @@ CREATE TABLE IF NOT EXISTS candidate_contexts (
 );
 CREATE INDEX IF NOT EXISTS idx_candidate_contexts_year ON candidate_contexts(year, region);
 CREATE INDEX IF NOT EXISTS idx_candidate_contexts_cluster ON candidate_contexts(cluster_id);
-
-

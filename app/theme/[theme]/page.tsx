@@ -5,6 +5,8 @@ import { getSongsByTheme, getThemeYearDistribution, getEventsByRelatedTheme } fr
 import { THEME_LABELS, THEME_COLORS, THEME_DESCRIPTIONS } from "@/lib/nlp/theme-scoring";
 import { Pill } from "@/components/ui/primitives";
 import { StoryNextStep } from "@/components/story/story-next-step";
+import { BecauseCard } from "@/components/evidence/because-card";
+import type { EvidencePreviewItem } from "@/components/evidence/evidence-preview";
 import type { Theme } from "@/lib/types";
 
 const VALID_THEMES = new Set(Object.keys(THEME_LABELS));
@@ -44,6 +46,8 @@ export default function ThemePage({ params }: { params: { theme: string } }) {
   const topYear = yearDist.length > 0
     ? yearDist.reduce((a, b) => a.songCount > b.songCount ? a : b)
     : null;
+  const topThemeSongs = songs.slice(0, 4);
+  const topThemeConfidence = topThemeSongs.length > 0 ? topThemeSongs.reduce((sum, s) => sum + s.score, 0) / topThemeSongs.length : 0;
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
@@ -72,6 +76,32 @@ export default function ThemePage({ params }: { params: { theme: string } }) {
           ) : null}
         </div>
       </header>
+
+      <section className="mb-10">
+        <BecauseCard
+          claim={`Why ${label} is a recurring chart theme`}
+          reasons={[
+            `${totalSongs} songs had this theme as a top signal.`,
+            topYear
+              ? `Peak activity is in ${topYear.year} with ${topYear.songCount} songs.`
+              : "Peak year is not currently available.",
+            `Signal strength is strongest for top theme matches (${(topThemeConfidence * 100).toFixed(0)}% mean top score).`,
+          ]}
+          confidence={Math.min(0.98, Math.max(0.2, topThemeConfidence))}
+          provenanceSources={["theme_scores", "hybrid"]}
+          evidenceRows={topThemeSongs.map<EvidencePreviewItem>((s) => ({
+            id: s.songId,
+            title: "Representative song",
+            text: `${s.title} — ${s.artist} (${s.year})`,
+            source: "theme_scores",
+            confidence: s.score,
+            matchedTerms: [],
+          }))}
+          evidencePreviewTitle="Representative songs"
+          caveat="Theme scoring is model-driven: strong matches suggest affinity, and high counts suggest cultural recurrence."
+          inferenceType="theme_overlap"
+        />
+      </section>
 
       {yearDist.length > 0 ? (
         <section className="mb-10">
@@ -133,7 +163,7 @@ export default function ThemePage({ params }: { params: { theme: string } }) {
               No songs scored for this theme yet. Run the enrichment pipeline.
             </li>
           ) : (
-            songs.slice(0, 50).map((s, i) => (
+            songs.slice(0, 100).map((s, i) => (
               <li key={s.songId} className="flex items-center gap-2 p-3 text-sm md:gap-3">
                 <span className="w-5 shrink-0 text-right text-xs font-semibold tabular-nums text-ink-500 md:w-6">
                   {i + 1}
@@ -160,9 +190,9 @@ export default function ThemePage({ params }: { params: { theme: string } }) {
             ))
           )}
         </ol>
-        {songs.length > 50 ? (
+        {songs.length > 100 ? (
           <p className="mt-3 text-xs text-ink-500">
-            Showing top 50 of {songs.length} songs.
+            Showing top 100 of {songs.length} songs.
           </p>
         ) : null}
       </section>

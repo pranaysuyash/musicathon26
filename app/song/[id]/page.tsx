@@ -1,25 +1,38 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { getSongById, getSimilarSongs, getArtistMeta } from "@/lib/db/queries";
+import { headers } from "next/headers";
+import { getSongById, getSimilarSongs, getArtistMeta, getEvidenceForEdges } from "@/lib/db/queries";
+import { resolveSongId } from "@/lib/song-redirects";
 
 export async function generateMetadata({
   params,
 }: {
   params: { id: string };
 }): Promise<Metadata> {
-  const song = getSongById(decodeRouteParam(params.id));
+  const song = getSongById(decodeRouteParam(resolveSongId(params.id)));
   if (!song) return { title: "Song not found" };
   return {
     title: `${song.title} — ${song.artist} (${song.year})`,
     description: `Lyrics, themes, entities, and event connections for "${song.title}" by ${song.artist} (${song.year}, Billboard Hot 100 year-end #${song.chartRank}).`,
+    openGraph: {
+      images: [
+        {
+          url: `/api/og?type=song&title=${encodeURIComponent(`${song.title} — ${song.artist}`)}&subtitle=${encodeURIComponent(`A cultural lens for ${song.year}`)}`,
+          width: 1200,
+          height: 630,
+        },
+      ],
+    },
   };
 }
 import { initDb } from "@/lib/db";
 import { all } from "@/lib/db/sql";
 import { Pill, SectionTitle, ConfidenceBar } from "@/components/ui/primitives";
+import { BecauseCard } from "@/components/evidence/because-card";
 import { THEME_LABELS, THEME_COLORS } from "@/lib/nlp/theme-scoring";
 import type { Theme } from "@/lib/types";
+import type { EvidencePreviewItem } from "@/components/evidence/evidence-preview";
 
 export const dynamic = "force-dynamic";
 
@@ -51,9 +64,18 @@ interface EventLinkRow {
 }
 
 export default function SongPage({ params }: PageProps) {
+  const cspNonce = headers().get("X-CSP-Nonce") ?? undefined;
   initDb();
-  const id = decodeRouteParam(params.id);
-  const song = getSongById(id);
+  // Resolve legacy song IDs (e.g., the pre-canonical-migration "gods-plan-drake"
+  // slug form) before looking the song up. "replace" in the redirect type
+  // produces a 308 = permanent, so SEO weight is preserved and crawlers see
+  // the URL change.
+  const requestedId = decodeRouteParam(params.id);
+  const canonicalId = resolveSongId(requestedId);
+  if (canonicalId !== requestedId) {
+    redirect(`/song/${encodeURIComponent(canonicalId)}`);
+  }
+  const song = getSongById(canonicalId);
   if (!song) notFound();
 
   const themes = all<ThemeRow>(
@@ -117,6 +139,12 @@ export default function SongPage({ params }: PageProps) {
       ORDER BY ge.weight DESC`,
     `versesignal:n:song:${song.id}`
   );
+  const eventEvidenceByEdge = getEvidenceForEdges(eventLinks.map((e) => e.edge_id));
+  const eventEvidenceSources = new Set<string>(["billboard"]);
+
+  for (const edgeEvidence of Object.values(eventEvidenceByEdge)) {
+    for (const e of edgeEvidence) eventEvidenceSources.add(e.source);
+  }
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
@@ -323,7 +351,17 @@ export default function SongPage({ params }: PageProps) {
               {eventLinks.length === 0 ? (
                 <li className="p-4 text-sm text-ink-500">No event links yet.</li>
               ) : (
-                eventLinks.map((e) => (
+                eventLinks.map((e) => {
+                  const edgeEvidence = eventEvidenceByEdge[e.edge_id] ?? [];
+                  const evidenceRows = edgeEvidence.map<EvidencePreviewItem>((ev) => ({
+                    id: ev.id,
+                    title: ev.evidenceType.replace(/_/g, " "),
+                    text: ev.value,
+                    source: ev.source,
+                    confidence: ev.confidence,
+                    matchedTerms: [],
+                  }));
+                  return (
                   <li key={e.event_id} className="p-3 text-xs">
                     <Link
                       href={`/event/${encodeURIComponent(e.event_id)}`}
@@ -339,22 +377,41 @@ export default function SongPage({ params }: PageProps) {
                       </Pill>
                     </div>
                     {e.explanation ? <p className="mt-1 text-ink-500 italic">{e.explanation}</p> : null}
-                    {e.evidence_sources ? (
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        {e.evidence_sources.split(",").map((source) => (
-                          <Pill key={source} variant="mute">{source}</Pill>
-                        ))}
-                      </div>
-                    ) : null}
+                    <div className="mt-2">
+                      <BecauseCard
+                        claim={`${song.title} ↔ ${e.event_name}`}
+                        reasons={[
+                          e.explanation ?? "Connection is inferred from song-event linkage.",
+                          `Weight ${(e.weight * 100).toFixed(0)}%.`,
+                          `Confidence ${(e.confidence * 100).toFixed(0)}%.`,
+                        ]}
+                        confidence={e.confidence}
+                        provenanceSources={e.evidence_sources ? ["billboard", ...e.evidence_sources.split(",")] : Array.from(eventEvidenceSources)}
+                        evidenceRows={evidenceRows}
+                        evidencePreviewTitle="Representative evidence"
+                        caveat={e.evidence_count > 0
+                          ? "Evidence is assembled directly from the linked edge evidence rows."
+                          : "No expanded evidence rows are stored for this edge yet."}
+                      />
+                    </div>
                   </li>
-                ))
+                  );
+                })
               )}
             </ul>
-           </section>
+            <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] text-ink-400">
+              {Array.from(eventEvidenceSources).map((source) => (
+                <span key={source} className="rounded border border-ink-700 px-2 py-1">
+                  {source}
+                </span>
+              ))}
+            </div>
+          </section>
          </aside>
        </div>
        <script
          type="application/ld+json"
+         nonce={cspNonce}
          dangerouslySetInnerHTML={{
            __html: JSON.stringify({
              "@context": "https://schema.org",

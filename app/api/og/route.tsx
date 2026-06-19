@@ -15,9 +15,15 @@ export async function GET(req: NextRequest) {
     default: "#a855f7",
     lens: "#22d3ee",
     event: "#f59e0b",
+    ask: "#34d399",
+    health: "#06b6d4",
+    globe: "#06b6d4",
+    scrub: "#8b5cf6",
+    year: "#6366f1",
     theme: "#10b981",
     song: "#f472b6",
-    year: "#6366f1",
+    artist: "#a78bfa",
+    articles: "#f59e0b",
     graph: "#a855f7",
   };
   const accent = accentColors[type] ?? accentColors.default;

@@ -46,12 +46,14 @@ ALLOWED_SOURCE_APIS = frozenset({
     "musixmatch", "songstats", "billboard", "musicbrainz", "wikidata",
     "jam_base", "jambase", "cyanite", "elevenlabs", "manual",
     "spacy", "gliner", "embedding", "llm", "lexicon", "hybrid", "human",
+    "gazetteer",
 })
 
 ALLOWED_EVIDENCE_SOURCES = frozenset({
     "musixmatch", "songstats", "billboard", "musicbrainz", "wikidata",
     "jam_base", "jambase", "cyanite", "elevenlabs", "manual",
     "spacy", "gliner", "embedding", "llm", "lexicon", "hybrid", "human",
+    "gazetteer",
 })
 
 

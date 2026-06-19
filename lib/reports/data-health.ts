@@ -54,6 +54,8 @@ export interface DataHealth {
     current: number;
     target: number;
   }[];
+  confidence_histogram: { bucket: string; count: number }[];
+  evidence_per_edge_histogram: { bucket: string; count: number }[];
 }
 
 function pct(num: number, denom: number): number {
@@ -263,6 +265,49 @@ export async function getDataHealth(): Promise<DataHealth> {
     });
   }
 
+  // Low-confidence edges: confidence below 0.3 — they may be
+  // productively noisy (e.g. a co-credit on a duet) but should
+  // be visible in the operator surface.
+  const lowConfEdges = row(
+    "SELECT COUNT(*) AS c FROM graph_edges WHERE confidence < 0.3"
+  );
+  if (lowConfEdges > 0) {
+    integrityIssues.push({
+      check: "Low-confidence edges (<0.3)",
+      severity: "info",
+      count: lowConfEdges,
+      description: "Edges with confidence below 0.3. These are not errors but they may be worth inspecting.",
+    });
+  }
+
+  // Suspicious artist splits: detect songs where the artist field
+  // was over-aggressively split. A genuine 7-collaborator cast like
+  // Encanto is fine. We flag when the average artist token is
+  // very short (likely a split-by-word error, not a real roster).
+  const suspectRows = db
+    .prepare(
+      `SELECT id, artist FROM songs
+       WHERE LENGTH(artist) - LENGTH(REPLACE(artist, ',', '')) >= 4`
+    )
+    .all() as { id: string; artist: string }[];
+  let suspiciousSplits = 0;
+  for (const r of suspectRows) {
+    const tokens = r.artist.split(",").map((t) => t.trim()).filter(Boolean);
+    if (tokens.length === 0) continue;
+    const avgLen = tokens.reduce((acc, t) => acc + t.length, 0) / tokens.length;
+    // A genuine cast has tokens like "Carolina Gaitán" (16 chars);
+    // a bad split produces tokens like "a" or "the" (≤3 chars).
+    if (avgLen < 6) suspiciousSplits++;
+  }
+  if (suspiciousSplits > 0) {
+    integrityIssues.push({
+      check: "Suspicious artist splits",
+      severity: "warn",
+      count: suspiciousSplits,
+      description: "Songs with ≥4 commas and average artist token <6 chars — likely over-split. Inspect for false positives.",
+    });
+  }
+
   if (integrityIssues.length === 0) {
     integrityIssues.push({
       check: "All integrity checks pass",
@@ -271,6 +316,64 @@ export async function getDataHealth(): Promise<DataHealth> {
       description: "No naked edges, no orphan evidence, all nodes canonical.",
     });
   }
+
+  // === Confidence histogram ===
+  // 5 buckets: [0, 0.2), [0.2, 0.4), ..., [0.8, 1.0].
+  // We bucket via CASE WHEN so it's a single SQL pass.
+  const confBuckets = db
+    .prepare(
+      `SELECT
+         CASE
+           WHEN confidence < 0.2 THEN '0.0-0.2'
+           WHEN confidence < 0.4 THEN '0.2-0.4'
+           WHEN confidence < 0.6 THEN '0.4-0.6'
+           WHEN confidence < 0.8 THEN '0.6-0.8'
+           ELSE '0.8-1.0'
+         END AS bucket,
+         COUNT(*) AS c
+       FROM graph_edges
+       GROUP BY bucket
+       ORDER BY bucket`
+    )
+    .all() as { bucket: string; c: number }[];
+  // Ensure all buckets are present (with 0 if missing) for a stable
+  // histogram shape on the page.
+  const confBucketOrder = ["0.0-0.2", "0.2-0.4", "0.4-0.6", "0.6-0.8", "0.8-1.0"];
+  const confMap = new Map(confBuckets.map((b) => [b.bucket, b.c]));
+  const confidence_histogram = confBucketOrder.map((b) => ({
+    bucket: b,
+    count: confMap.get(b) ?? 0,
+  }));
+
+  // === Evidence-per-edge histogram ===
+  // How many edges have 0, 1, 2, 3, 4, 5+ evidence rows.
+  const evBuckets = db
+    .prepare(
+      `SELECT
+         CASE
+           WHEN ev_count = 0 THEN '0'
+           WHEN ev_count = 1 THEN '1'
+           WHEN ev_count = 2 THEN '2'
+           WHEN ev_count = 3 THEN '3'
+           WHEN ev_count = 4 THEN '4'
+           ELSE '5+'
+         END AS bucket,
+         COUNT(*) AS c
+       FROM (
+         SELECT ge.id, COUNT(ev.id) AS ev_count
+         FROM graph_edges ge LEFT JOIN evidence ev ON ev.edge_id = ge.id
+         GROUP BY ge.id
+       )
+       GROUP BY bucket
+       ORDER BY bucket`
+    )
+    .all() as { bucket: string; c: number }[];
+  const evBucketOrder = ["0", "1", "2", "3", "4", "5+"];
+  const evMap = new Map(evBuckets.map((b) => [b.bucket, b.c]));
+  const evidence_per_edge_histogram = evBucketOrder.map((b) => ({
+    bucket: b,
+    count: evMap.get(b) ?? 0,
+  }));
 
   // === Signal pipeline stats ===
   const pipelineStats: DataHealth["intent_vs_actual"] = [
@@ -303,24 +406,39 @@ export async function getDataHealth(): Promise<DataHealth> {
 
   const intentVsActual: DataHealth["intent_vs_actual"] = [
     {
-      description: "Songs in spine (target: 150)",
+      description: "Songs in spine (target: 300, top 50/yr × 6 years)",
       current: songs,
-      target: 150,
+      target: 300,
     },
     {
-      description: "Songs with lyrics (target: 150)",
+      description: "Songs with lyrics (target: 280+)",
       current: songsWithLyrics,
-      target: 150,
+      target: 280,
     },
     {
-      description: "Curated world events (target: 15)",
+      description: "Curated world events (target: 15, all with regions_json)",
       current: events,
       target: 15,
     },
     {
-      description: "Artist entities linked (target: 86+ = all unique primary artists)",
+      description: "Artist entities (target: 200+ across 300 songs)",
       current: entities,
-      target: 86,
+      target: 200,
+    },
+    {
+      description: "Songs with theme scores (target: 280+)",
+      current: row("SELECT COUNT(DISTINCT song_id) AS c FROM theme_scores"),
+      target: 280,
+    },
+    {
+      description: "Songs with mood scores (target: 250+)",
+      current: row("SELECT COUNT(DISTINCT song_id) AS c FROM mood_scores"),
+      target: 250,
+    },
+    {
+      description: "Songs with entity mentions (target: 250+)",
+      current: row("SELECT COUNT(DISTINCT song_id) AS c FROM entity_mentions"),
+      target: 250,
     },
     {
       description: "Artist cross-linked to JamBase (target: 80+)",
@@ -362,5 +480,7 @@ export async function getDataHealth(): Promise<DataHealth> {
     year_breakdown: yearBreakdown,
     integrity_issues: integrityIssues,
     intent_vs_actual: [...intentVsActual, ...pipelineStats],
+    confidence_histogram,
+    evidence_per_edge_histogram,
   };
 }

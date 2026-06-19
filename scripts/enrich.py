@@ -196,6 +196,15 @@ def open_db() -> sqlite3.Connection:
     return conn
 
 
+def ensure_graph_edge_columns(conn: sqlite3.Connection) -> None:
+    cols = {row["name"] for row in conn.execute("PRAGMA table_info(graph_edges)").fetchall()}
+    if "inference_type" not in cols:
+        conn.execute("ALTER TABLE graph_edges ADD COLUMN inference_type TEXT")
+    if "matched_terms_json" not in cols:
+        conn.execute("ALTER TABLE graph_edges ADD COLUMN matched_terms_json TEXT")
+    conn.commit()
+
+
 def load_songs(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     return list(
         conn.execute(
@@ -381,6 +390,48 @@ def run_ner(p: Pipeline, lyrics: str) -> list[dict]:
     if not lyrics:
         return out
     lines = [l.strip() for l in lyrics.splitlines() if l.strip()]
+
+    # Gazetteer pass first (highest-precision, zero-shot).
+    # This catches slang/colloquial references that GLiNER and
+    # spaCy both miss: "Henny" (Hennessy), "Benz" (Mercedes-Benz),
+    # "the six" (Toronto), "lean" (purple drank), etc.
+    # Per motto_v3 §0.8 the gazetteer is part of the data layer;
+    # adding an entry is a code+config change. The pattern of
+    # `phrase -> canonical + type` lets us merge into entities
+    # without losing provenance.
+    gazetteer_path = REPO / "lib" / "nlp" / "gazetteer.json"
+    gazetteer: dict = {}
+    if gazetteer_path.exists():
+        try:
+            with open(gazetteer_path, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+            # Strip the _comment key.
+            gazetteer = {k: v for k, v in raw.items() if not k.startswith("_")}
+        except (json.JSONDecodeError, OSError) as err:
+            print(f"  · gazetteer load failed: {err}", file=sys.stderr)
+
+    if gazetteer:
+        for line in lines:
+            lower = line.lower()
+            for phrase, target in gazetteer.items():
+                phrase_lc = phrase.lower()
+                start = 0
+                while True:
+                    idx = lower.find(phrase_lc, start)
+                    if idx == -1:
+                        break
+                    out.append({
+                        "text": line[idx:idx + len(phrase)],
+                        "label": target.get("type", "entity").lower(),
+                        "start": idx,
+                        "end": idx + len(phrase),
+                        "source": "gazetteer",
+                        "confidence": 0.95,  # high confidence: hand-curated
+                        "canonical": target.get("canonical", phrase),
+                        "labels_version": "gazetteer-2026-06-18",
+                    })
+                    start = idx + len(phrase_lc)
+
     if p.gliner is not None:
         # The Pipeline now stores (gliner, labels_version) tuple in p.gliner
         # (or just the model in older runs). Normalize.
@@ -428,7 +479,11 @@ def entity_canonical_key(text: str, label: str) -> str:
 
 
 def upsert_entity(conn: sqlite3.Connection, ent: dict) -> str:
-    canon = ent["text"].strip()
+    # Gazetteer entries carry an explicit `canonical` mapping
+    # (e.g., "Henny" -> "Hennessy"); everything else falls back to
+    # the surface form. Per the gazetteer rule (P5.2.2), this is
+    # the only place where we collapse slang to canonical.
+    canon = ent.get("canonical", ent["text"]).strip()
     label = ent["label"].replace(" ", "_")
     eid = f"versesignal:ent:{entity_canonical_key(canon, label)}".replace(" ", "-")
     conn.execute(
@@ -443,6 +498,11 @@ def upsert_entity(conn: sqlite3.Connection, ent: dict) -> str:
 
 def insert_mention(conn: sqlite3.Connection, song_id: str, line_id: str, ent_id: str, ent: dict) -> None:
     mid = f"versesignal:em:{song_id}:{line_id}:{ent_id}:{ent['source']}"
+    # For gazetteer hits, the entity_id is already the canonical form,
+    # but the surface_form should still be the original phrase from
+    # the lyric (e.g., "Henny") so the UI can highlight the
+    # slang-to-canonical mapping.
+    surface = ent["text"]
     conn.execute(
         """
         INSERT OR REPLACE INTO entity_mentions
@@ -454,12 +514,14 @@ def insert_mention(conn: sqlite3.Connection, song_id: str, line_id: str, ent_id:
             song_id,
             line_id,
             ent_id,
-            ent["text"],
+            surface,
             ent["start"],
             ent["end"],
             ent["confidence"],
             ent["source"],
-            "gliner_medium-v2.1" if ent["source"] == "gliner" else "spacy_en_core_web_sm",
+            "gliner_medium-v2.1" if ent["source"] == "gliner" else (
+                "gazetteer-2026-06-18" if ent["source"] == "gazetteer" else "spacy_en_core_web_sm"
+            ),
         ),
     )
 
@@ -588,6 +650,7 @@ def main() -> int:
     args = parser.parse_args()
 
     conn = open_db()
+    ensure_graph_edge_columns(conn)
     lexicon = load_lexicon()
     embedder, dim, model_version = (None, 0, "none")
     if not args.skip_embeddings:
@@ -705,22 +768,36 @@ def main() -> int:
                     line_id = row["id"]
                     break
             insert_mention(conn, song_id, line_id, eid, ent)
-            # Graph edge: song -> entity (mentions)
+            # Graph edge: song -> entity (mentions). For gazetteer
+            # hits, the entity_id is already the canonical form
+            # (e.g., "Hennessy") so the graph node labels the canonical
+            # entity, while the entity_mentions.surface_form preserves
+            # the original phrase (e.g., "Henny").
             edge_id = f"versesignal:e:{song_id}:mentions:{eid}:{ent['source']}"
-            song_node = f"versesignal:n:song:versesignal:{song_id.split(':',1)[1] if song_id.startswith('versesignal:') else song_id}"
-            # song_node was already created during seed; use canonical form:
             song_node = f"versesignal:n:song:{song_id}"
             ent_node = f"versesignal:n:entity:{eid}"
+            canonical_label = ent.get("canonical", ent["text"])
             conn.execute(
                 "INSERT OR IGNORE INTO graph_nodes (id, node_type, label) VALUES (?, ?, ?)",
-                (ent_node, "entity", ent["text"]),
+                (ent_node, "entity", canonical_label),
             )
             ev_id = f"versesignal:ev:{edge_id}"
+            # For gazetteer hits, mark the matched terms + use
+            # `gazetteer_alias` evidence type so the graph explorer
+            # can highlight the slang->canonical mapping.
+            is_gaz = ent["source"] == "gazetteer"
+            matched_terms_json = json.dumps([ent["text"]]) if is_gaz else None
+            evidence_type = "gazetteer_alias" if is_gaz else "entity_match"
+            evidence_value = (
+                f"{ent['text']} → {canonical_label} ({ent['label']})"
+                if is_gaz
+                else f"{ent['text']} ({ent['label']})"
+            )
             conn.execute(
                 """
                 INSERT OR REPLACE INTO graph_edges
-                  (id, src_id, dst_id, edge_type, weight, confidence, evidence_ids_json, source_api, model_version, explanation)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  (id, src_id, dst_id, edge_type, weight, confidence, evidence_ids_json, source_api, model_version, inference_type, matched_terms_json, explanation)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     edge_id,
@@ -731,13 +808,13 @@ def main() -> int:
                     float(ent["confidence"]),
                     json.dumps([ev_id]),
                     ent["source"],
-                    # Per 0.9: model_version encodes both the model and
-                    # the label taxonomy used to produce the row. When
-                    # the labels change, bump LABELS_VERSION in
-                    # lib/nlp/ner_labels.py.
                     f"urchade/gliner_medium-v2.1+labels-{ent.get('labels_version', 'unknown')}"
                     if ent["source"] == "gliner" else model_version,
-                    f"NER detected '{ent['text']}' ({ent['label']}) in lyrics.",
+                    "named_entity_match",
+                    matched_terms_json,
+                    f"NER detected '{ent['text']}' ({ent['label']}) in lyrics."
+                    if not is_gaz
+                    else f"Gazetteer mapped '{ent['text']}' to '{canonical_label}' ({ent['label']}).",
                 ),
             )
             conn.execute(
@@ -746,7 +823,7 @@ def main() -> int:
                   (id, edge_id, evidence_type, value, source, confidence)
                 VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (ev_id, edge_id, "entity_match", f"{ent['text']} ({ent['label']})", ent["source"], float(ent["confidence"])),
+                (ev_id, edge_id, evidence_type, evidence_value, ent["source"], float(ent["confidence"])),
             )
 
         # Event linking
@@ -783,8 +860,8 @@ def main() -> int:
                 conn.execute(
                     """
                     INSERT OR REPLACE INTO graph_edges
-                      (id, src_id, dst_id, edge_type, weight, confidence, evidence_ids_json, source_api, model_version, explanation)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                      (id, src_id, dst_id, edge_type, weight, confidence, evidence_ids_json, source_api, model_version, inference_type, matched_terms_json, explanation)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         edge_id,
@@ -796,6 +873,8 @@ def main() -> int:
                         json.dumps([]),
                         "hybrid",
                         model_version,
+                        link_type,
+                        json.dumps(sorted(set(matched_terms))),
                         " ".join(explanation_parts),
                     ),
                 )
@@ -809,6 +888,17 @@ def main() -> int:
                         VALUES (?, ?, ?, ?, ?, ?)
                         """,
                         (eid, edge_id, "lyric_line", line["line_text"], "lexicon", 0.9),
+                    )
+                for i, term in enumerate(sorted(set(matched_terms))):
+                    eid_term = f"versesignal:ev:{edge_id}:term:{i}"
+                    ev_ids.append(eid_term)
+                    conn.execute(
+                        """
+                        INSERT OR REPLACE INTO evidence
+                          (id, edge_id, evidence_type, value, source, confidence)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        """,
+                        (eid_term, edge_id, "lyric_term", term, "lexicon", 0.9),
                     )
                 eid_terms = f"versesignal:ev:{edge_id}:terms"
                 ev_ids.append(eid_terms)
@@ -845,8 +935,8 @@ def main() -> int:
             conn.execute(
                 """
                 INSERT OR REPLACE INTO graph_edges
-                  (id, src_id, dst_id, edge_type, weight, confidence, evidence_ids_json, source_api, model_version, explanation)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  (id, src_id, dst_id, edge_type, weight, confidence, evidence_ids_json, source_api, model_version, inference_type, matched_terms_json, explanation)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     edge_id,
@@ -858,6 +948,8 @@ def main() -> int:
                     json.dumps([ev_id]),
                     source,
                     model_version,
+                    "theme_overlap",
+                    None,
                     f"Theme scoring from {source}.",
                 ),
             )

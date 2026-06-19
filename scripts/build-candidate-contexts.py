@@ -238,15 +238,17 @@ def build_explanation(cluster: dict, events: list, posture_dist: dict,
         # No events or no posture data
         if not events:
             explanation = (
-                f"In {year}, a year with no tracked cultural events, this cluster of {signal_type_desc} "
-                f"represents the default state of chart music. The {', '.join(mood_labels)} moods "
-                f"ran on industry momentum, shaped by the commercial songwriting machine "
-                f"rather than external cultural forces."
+                f"In {year}, a year without overlapping curated events, the chart ran on its own momentum. "
+                f"This cluster of {signal_type_desc} shows the {', '.join(mood_labels)} moods that "
+                f"dominated pop without an external cultural pressure. "
+                f"Comparing it to surrounding years, this is a relative baseline — the year music "
+                f"was just being music, not cultural commentary. "
+                f"Listen for the mood signature (energetic + romantic + tense) that anchors a year "
+                f"of pure chart culture."
                 f"{lift_note} {cy_note}"
             )
             short = (
-                f"Default state: {signal_type_desc} "
-                f"music shaped by industry momentum."
+                f"{year} baseline year: {', '.join(mood_labels[:2])} defined a year of chart momentum."
             )
         else:
             # Fallback

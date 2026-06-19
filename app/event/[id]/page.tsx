@@ -2,16 +2,22 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { getEventById, getSongsForEvent, getAllEvents, getEventSignalDecay, getEventLeadAnalysis, REGION_LABELS } from "@/lib/db/queries";
+import { t, resolveLocale } from "@/lib/i18n/strings";
+import { BecauseCard } from "@/components/evidence/because-card";
+import type { EvidencePreviewItem } from "@/components/evidence/evidence-preview";
 
 export async function generateMetadata({
   params,
+  searchParams,
 }: {
   params: { id: string };
+  searchParams: { lang?: string };
 }): Promise<Metadata> {
+  const locale = resolveLocale(searchParams.lang);
   const event = getEventById(decodeRouteParam(params.id));
   if (!event) return { title: "Event not found" };
   return {
-    title: event.name,
+    title: `${event.name} — ${t(locale, "event.title")}`,
     description: `Songs linked to ${event.name} (${event.startDate}–${event.endDate ?? "ongoing"}). ${event.category}.`,
     openGraph: {
       images: [{ url: `/api/og?type=event&title=${encodeURIComponent(event.name)}&subtitle=${encodeURIComponent(`Songs linked to ${event.name} (${event.category})`)}`, width: 1200, height: 630 }],
@@ -36,9 +42,11 @@ export const dynamic = "force-dynamic";
 
 interface PageProps {
   params: { id: string };
+  searchParams: { lang?: string };
 }
 
-export default function EventPage({ params }: PageProps) {
+export default function EventPage({ params, searchParams }: PageProps) {
+  const locale = resolveLocale(searchParams.lang);
   initDb();
   const id = decodeRouteParam(params.id);
   const event = getEventById(id);
@@ -63,13 +71,31 @@ export default function EventPage({ params }: PageProps) {
   const linked = getSongsForEvent(event.id, 0.1);
   const decay = getEventSignalDecay(event.id);
   const lead = getEventLeadAnalysis(event.id);
+  const linkedSources = Array.from(
+    new Set(["billboard", ...linked.flatMap((row) => [row.edge.sourceApi, ...row.evidence.map((e) => e.source)])])
+  );
+  const linkedConfidence = linked.length > 0
+    ? linked.reduce((sum, row) => sum + row.edge.confidence, 0) / linked.length
+    : 0;
+  const linkedEvidenceRows = linked
+    .flatMap((row) =>
+      row.evidence.slice(0, 1).map((e) => ({
+        id: `${row.songId}:${e.id}`,
+        title: e.evidenceType.replace(/_/g, " "),
+        text: e.value,
+        source: e.source,
+        confidence: e.confidence,
+        matchedTerms: row.edge.matchedTerms,
+      } as EvidencePreviewItem))
+    )
+    .slice(0, 4);
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
       <Link href="/" className="text-xs text-ink-400 hover:text-ink-200">← VerseSignal</Link>
       <header className="mt-4 mb-10">
         <div className="flex items-center gap-2">
-          <Pill variant="echo">EVENT LENS</Pill>
+          <Pill variant="echo">{t(locale, "event.title")}</Pill>
           <Pill variant="mute">{event.category}</Pill>
           <Pill variant="mute">{event.startDate} → {event.endDate ?? "present"}</Pill>
           {event.regions.length > 0 ? event.regions.map((r) => (
@@ -97,6 +123,25 @@ export default function EventPage({ params }: PageProps) {
           ))}
         </div>
       </header>
+
+      <section className="mb-10">
+        <BecauseCard
+          claim={`${event.name} event connections`}
+          reasons={[
+            `${linked.length} songs cleared the event-link threshold (>= 0.1) with this event.`,
+            linked.length > 0
+              ? `Average edge confidence: ${(linkedConfidence * 100).toFixed(0)}%.`
+              : "No song links are currently above the threshold.",
+            `Temporal window: ${event.startDate} to ${event.endDate ?? "present"}.`,
+          ]}
+          confidence={linked.length > 0 ? linkedConfidence : 0.35}
+          provenanceSources={linkedSources}
+          evidenceRows={linkedEvidenceRows}
+          evidencePreviewTitle="Representative evidence"
+          caveat="This page surfaces stored edge-level evidence. It is the same evidence used in graph-edge proof, inline here."
+          inferenceType={linked.length > 0 ? linked[0].edge.inferenceType : "hybrid"}
+        />
+      </section>
 
       <section className="mb-10">
         <SectionTitle subtitle="Sorted by composite link strength. Click for evidence.">
@@ -127,33 +172,38 @@ export default function EventPage({ params }: PageProps) {
                       <span>{row.year}</span>
                     </div>
                   </div>
-                  <div className="flex flex-col items-end gap-1">
-                    <Pill variant="warn">{row.edge.edgeType.replace(/_/g, " ")}</Pill>
-                    <ConfidenceBar value={row.edge.weight} />
-                  </div>
+                <div className="flex flex-col items-end gap-1">
+                  <Pill variant="warn">{row.edge.edgeType.replace(/_/g, " ")}</Pill>
+                  <ConfidenceBar value={row.edge.weight} />
                 </div>
-                {row.edge.explanation ? (
-                  <p className="mt-2 ml-11 text-xs text-ink-400 italic">{row.edge.explanation}</p>
-                ) : null}
-                {row.evidence.length > 0 ? (
-                  <details className="ml-11 mt-2">
-                    <summary className="cursor-pointer text-xs text-ink-500 hover:text-ink-300">
-                      {row.evidence.length} evidence {row.evidence.length === 1 ? "row" : "rows"}
-                    </summary>
-                    <ul className="mt-2 space-y-1.5">
-                      {row.evidence.map((e) => (
-                        <li key={e.id} className="rounded border border-ink-800 bg-ink-900/60 p-2 text-xs">
-                          <div className="mb-1 flex items-center gap-2">
-                            <Pill variant="mute">{e.evidenceType.replace(/_/g, " ")}</Pill>
-                            <Pill variant="mute">{e.source}</Pill>
-                            <span className="ml-auto text-ink-500">{(e.confidence * 100).toFixed(0)}%</span>
-                          </div>
-                          <p className="text-ink-200 italic">&ldquo;{e.value}&rdquo;</p>
-                        </li>
-                      ))}
-                    </ul>
-                  </details>
-                ) : null}
+                </div>
+                <div className="mt-2 ml-11">
+                  <BecauseCard
+                    claim={`${row.title} ↔ ${event.name}`}
+                    reasons={[
+                      row.edge.explanation
+                        ? row.edge.explanation
+                        : "This link is inferred from event overlap and lyric/signal alignment.",
+                      `${row.edge.edgeType.replace(/_/g, " ")} with ${(row.edge.weight * 100).toFixed(0)}% link weight.`,
+                      `Confidence ${(row.edge.confidence * 100).toFixed(0)}%.`,
+                    ]}
+                    confidence={row.edge.confidence}
+                    provenanceSources={[row.edge.sourceApi, ...row.evidence.map((e) => e.source)]}
+                    evidenceRows={row.evidence.map((e) => ({
+                      id: e.id,
+                      title: e.evidenceType.replace(/_/g, " "),
+                      text: e.value,
+                      source: e.source,
+                      confidence: e.confidence,
+                      matchedTerms: row.edge.matchedTerms,
+                    }))}
+                    evidencePreviewTitle="Why this song connects"
+                    inferenceType={row.edge.inferenceType}
+                    caveat={row.evidence.length > 0
+                      ? "Direct lyric snippets can be seen in each evidence row and matched terms are highlighted when present."
+                      : "This edge has no expanded evidence rows yet; connection is graph-derived and source-backed."}
+                  />
+                </div>
               </li>
             ))
           )}
@@ -163,11 +213,16 @@ export default function EventPage({ params }: PageProps) {
       {/* Event lead analysis (P2.3) — signals that were already shifting before the event */}
       {lead && lead.leadSignals.length > 0 ? (
         <section className="mb-10">
-          <SectionTitle subtitle={`Signal changes visible in the chart year before this event (${lead.preEventYear}).`}>
-            Lead signals
+          <SectionTitle
+            subtitle={
+              `Signals already elevated in the chart year before this event (${lead.preEventYear}). ` +
+              `lead = same direction during event, drift = opposite direction, ambient = pre-event only.`
+            }
+          >
+            Pre-event signal resonance
             {lead.totalCorrelatedSignals > 1 ? (
               <span className="ml-2 text-xs font-normal text-ink-400">
-                · {(lead.leadSignalRate * 100).toFixed(0)}% lead rate
+                · {(lead.leadSignalRate * 100).toFixed(0)}% resonance rate
                 ({lead.preElevatedSignals}/{lead.totalCorrelatedSignals} directionally consistent)
               </span>
             ) : null}
@@ -206,23 +261,34 @@ export default function EventPage({ params }: PageProps) {
           {lead.leadSignalRate > 0.3 ? (
             <p className="mt-3 text-xs text-ink-500">
               <span className="text-signal-400 font-medium">High lead rate.</span>{" "}
-              Over {lead.leadSignalRate > 0.5 ? "half" : "a third"} of signals correlated
-              with this event were already shifting in the same direction in {lead.preEventYear}
-              — the music was anticipating this moment.
+              Of {lead.totalCorrelatedSignals} signals correlated with this event,
+              {" "}{lead.preElevatedSignals} were already elevated in {lead.preEventYear} and
+              moved in the same direction during the event itself. This is a
+              pre-event <em>resonance</em>, not a prediction — chart signals were
+              shifting in the same direction the year before the event.
             </p>
           ) : lead.preElevatedSignals > 0 ? (
             <p className="mt-3 text-xs text-ink-500">
-              <span className="text-ink-300 font-medium">Partial anticipation.</span>{" "}
-              Some signals in this event&apos;s correlation set were elevated in {lead.preEventYear}
-              , but moved in the opposite direction during the event (labelled &quot;drift&quot;).
+              <span className="text-ink-300 font-medium">Partial pre-event shift.</span>{" "}
+              {lead.preElevatedSignals} signal{lead.preElevatedSignals === 1 ? " was" : "s were"}
+              {" "}elevated in {lead.preEventYear} but moved in the opposite direction
+              during the event (labelled &quot;drift&quot;). The chart shifted, but not in
+              a way that anticipated this event.
             </p>
           ) : (
             <p className="mt-3 text-xs text-ink-500">
-              <span className="text-ink-300 font-medium">No lead.</span>{" "}
-              None of the signals correlated with this event were elevated in {lead.preEventYear}.
-              The musical shift was synchronous with the event itself.
+              <span className="text-ink-300 font-medium">No pre-event shift.</span>{" "}
+              None of the {lead.totalCorrelatedSignals || "signals"} correlated
+              with this event were elevated in {lead.preEventYear}. The chart&apos;s
+              shift was synchronous with the event itself.
             </p>
           )}
+          {lead.leadSignals.length > 0 ? (
+            <p className="mt-1 text-xs text-ink-600">
+              Caveat: this is computed on {lead.totalCorrelatedSignals} signal{lead.totalCorrelatedSignals === 1 ? "" : "s"} in a
+              single pre-event year window — small samples, exploratory only.
+            </p>
+          ) : null}
         </section>
       ) : null}
 
@@ -276,6 +342,12 @@ export default function EventPage({ params }: PageProps) {
             className="inline-block rounded-lg bg-signal-500 px-5 py-2.5 text-sm font-medium text-ink-950 transition hover:bg-signal-400"
           >
             Open in Graph Explorer →
+          </Link>
+        <Link
+          href={`/event/${encodeURIComponent(event.id)}/articles${locale !== "en" ? `?lang=${locale}` : ""}`}
+          className="ml-3 inline-block rounded-lg border border-ink-700 bg-ink-800/60 px-5 py-2.5 text-sm font-medium text-ink-100 transition hover:border-ink-600 hover:bg-ink-800"
+        >
+            {t(locale, "event.articles")}
           </Link>
         </div>
       </section>

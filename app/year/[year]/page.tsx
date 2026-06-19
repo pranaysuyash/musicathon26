@@ -1,7 +1,32 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { getSongsByYear, getYearAvailability, getYearThemes, getYearMoods } from "@/lib/db/queries";
+import { getSongsByYear, getYearAvailability, getYearThemes, getYearMoods, getAllYears, getChartEraForYear, REGION_LABELS } from "@/lib/db/queries";
+import { t, resolveLocale, localePairs, type Locale } from "@/lib/i18n/strings";
+import { RegionPicker } from "@/components/lens/region-picker";
+
+function buildLangPath(path: string, locale: Locale, region = "US") {
+  const params = new URLSearchParams();
+  if (region !== "US") params.set("region", region);
+  if (locale !== "en") params.set("lang", locale);
+  const query = params.toString();
+  return query ? `${path}?${query}` : path;
+}
+
+function closestAvailableYear(years: number[], target: number): number | null {
+  if (years.length === 0) return null;
+  if (years.includes(target)) return target;
+  let best: number | null = null;
+  let bestGap = Infinity;
+  for (const y of years) {
+    const gap = Math.abs(y - target);
+    if (gap < bestGap) {
+      bestGap = gap;
+      best = y;
+    }
+  }
+  return best;
+}
 
 export async function generateMetadata({
   params,
@@ -29,24 +54,117 @@ export const dynamic = "force-dynamic";
 
 interface PageProps {
   params: { year: string };
+  searchParams: { region?: string; lang?: string };
 }
 
-export default function YearPage({ params }: PageProps) {
+export default function YearPage({ params, searchParams }: PageProps) {
   initDb();
   const year = parseInt(params.year, 10);
-  const availability = getYearAvailability(year, "US");
-  if (!availability) notFound();
-  const songs = getSongsByYear(year, "US");
-  const themes = getYearThemes(year, "US", 8);
-  const moods = getYearMoods(year, "US", 6);
+  if (!Number.isFinite(year)) notFound();
+  const locale = resolveLocale(searchParams.lang);
+  const region = (searchParams.region ?? "US") in REGION_LABELS ? (searchParams.region ?? "US") : "US";
+  const availability = getYearAvailability(year, region);
+  const allYears = getAllYears(region).map((r) => r.year);
+  const targetEra = getChartEraForYear(year);
+
+  if (!availability) {
+    const nearest = closestAvailableYear(allYears, year);
+    return (
+      <main className="mx-auto max-w-6xl px-6 py-10">
+        <div className="mb-4 flex flex-wrap gap-2 text-xs">
+          {localePairs.map(({ code, key }) => (
+            <a
+              key={code}
+              href={buildLangPath(`/year/${year}`, code, region)}
+              className={`rounded-full border px-2.5 py-1 transition ${
+                locale === code
+                  ? "border-signal-300 bg-signal-300/10 text-signal-200"
+                  : "border-ink-700 text-ink-400 hover:border-signal-300/70 hover:text-signal-200"
+              }`}
+            >
+              {t(locale, key)}
+            </a>
+          ))}
+          <RegionPicker
+            currentRegion={region}
+            currentYear={year}
+            basePath={`/year/${year}`}
+            locale={locale}
+          />
+        </div>
+
+        <Link href="/" className="text-xs text-ink-400 hover:text-ink-200">← VerseSignal</Link>
+        <header className="mt-4 mb-10">
+          <div className="flex flex-wrap items-center gap-2">
+            <Pill variant="signal">{t(locale, "lens.title")}</Pill>
+            <Pill variant="mute">{REGION_LABELS[region]}</Pill>
+            <Pill variant="mute">{targetEra.label}</Pill>
+          </div>
+          <h1 className="h-display mt-4 text-6xl font-semibold tracking-tight md:text-7xl">
+            {year}
+          </h1>
+          <p className="mt-3 max-w-2xl text-ink-300 text-pretty">
+            No chart data is available for this year in {REGION_LABELS[region] ?? region} yet.
+            The target product spine is {targetEra.label}, with the shipped demo slice focused first on
+            the 2020–2023 seeded years.
+          </p>
+        </header>
+        <section className="card p-5">
+          <p className="text-sm text-ink-300">
+            {nearest !== null ? (
+              <>
+                Try nearby data first:
+                {" "}
+                <Link
+                  href={buildLangPath(`/year/${nearest}`, locale, region)}
+                  className="font-medium text-signal-300 hover:text-signal-200 underline decoration-dotted"
+                >
+                  /year/{nearest}
+                </Link>
+                .
+              </>
+            ) : (
+              "Backfill data for this region to unlock this year."
+            )}
+          </p>
+        </section>
+      </main>
+    );
+  }
+
+  const songs = getSongsByYear(year, region, 100);
+  const themes = getYearThemes(year, region, 8);
+  const moods = getYearMoods(year, region, 6);
   const chartEra = availability.chartEra;
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
+      <div className="mb-4 flex flex-wrap gap-2 text-xs">
+        {localePairs.map(({ code, key }) => (
+          <a
+            key={code}
+            href={buildLangPath(`/year/${year}`, code, region)}
+            className={`rounded-full border px-2.5 py-1 transition ${
+              locale === code
+                ? "border-signal-300 bg-signal-300/10 text-signal-200"
+                : "border-ink-700 text-ink-400 hover:border-signal-300/70 hover:text-signal-200"
+            }`}
+          >
+            {t(locale, key)}
+          </a>
+        ))}
+        <RegionPicker
+          currentRegion={region}
+          currentYear={year}
+          basePath={`/year/${year}`}
+          locale={locale}
+        />
+      </div>
+
       <Link href="/" className="text-xs text-ink-400 hover:text-ink-200">← VerseSignal</Link>
       <header className="mt-4 mb-10">
         <div className="flex items-center gap-3">
-          <Pill variant="signal">YEAR LENS</Pill>
+          <Pill variant="signal">{t(locale, "lens.title")}</Pill>
           <Pill variant="mute">{chartEra.label} · source: {chartEra.sourceMode}</Pill>
         </div>
         <h1 className="h-display mt-4 text-6xl font-semibold tracking-tight md:text-7xl">
@@ -55,7 +173,7 @@ export default function YearPage({ params }: PageProps) {
         <p className="mt-3 max-w-2xl text-ink-300 text-pretty">
           {songs.length} charting songs in a {chartEra.label.toLowerCase()} context.
           Scores come from the 19-theme lexicon and 384-dim semantic embedding.
-          This page is data-first; for discovery-first context, start from <Link href={`/lens/${year}`} className="underline decoration-dotted">/lens/{year}</Link>.
+          This page is data-first; for discovery-first context, start from <Link href={buildLangPath(`/lens/${year}`, locale, region)} className="underline decoration-dotted">/lens/{year}</Link>.
         </p>
       </header>
 
@@ -171,12 +289,12 @@ function YearGraphPeek({ year }: { year: number }) {
           the dominant themes and moods, and the named entities detected in lyrics. Click any
           edge to see the lyric line and the model that produced the connection.
         </p>
-        <Link
-          href={`/graph?rootType=year&rootId=versesignal:year:${year}`}
-          className="inline-block rounded-lg bg-signal-500 px-5 py-2.5 text-sm font-medium text-ink-950 transition hover:bg-signal-400"
-        >
-          Open {year} graph →
-        </Link>
+      <Link
+        href={`/graph?rootType=year&rootId=versesignal:n:year:${year}`}
+        className="inline-block rounded-lg bg-signal-500 px-5 py-2.5 text-sm font-medium text-ink-950 transition hover:bg-signal-400"
+      >
+        Open {year} graph →
+      </Link>
       </div>
     </section>
   );

@@ -46,7 +46,7 @@ export function GraphExplorer() {
   // P0 fix: previously defaulted to "" which made /graph open
   // cold with "Select a node to start." Default to 2020 (the
   // year with the richest signal profile: COVID + BLM + election).
-  const rootId = sp.get("rootId") ?? "versesignal:year:2020";
+  const rootId = sp.get("rootId") ?? "versesignal:n:year:2020";
   const hops = Number(sp.get("hops") ?? "2");
   const [data, setData] = useState<GraphResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -117,7 +117,7 @@ export function GraphExplorer() {
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <span className="text-xs uppercase tracking-wider text-ink-500">Jump to:</span>
         <button
-          onClick={() => router.push(`/graph?rootType=year&rootId=versesignal:year:2020&hops=${hops}`)}
+          onClick={() => router.push(`/graph?rootType=year&rootId=versesignal:n:year:2020&hops=${hops}`)}
           className="pill pill-signal"
         >
           2020

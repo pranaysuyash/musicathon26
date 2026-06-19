@@ -89,6 +89,26 @@ interface EventRow {
   severity: number;
 }
 
+interface EventArticleRow {
+  id: string;
+  event_id: string;
+  source: string;
+  source_url: string;
+  title: string;
+  published_at: string | null;
+  summary: string | null;
+}
+
+export interface EventArticle {
+  id: string;
+  eventId: string;
+  source: string;
+  sourceUrl: string;
+  title: string;
+  publishedAt: string | null;
+  summary: string | null;
+}
+
 interface GraphNodeRow {
   id: string;
   node_type: string;
@@ -108,6 +128,8 @@ interface GraphEdgeRow {
   model_version: string | null;
   explanation: string | null;
   created_at: string;
+  inference_type: string | null;
+  matched_terms_json: string | null;
 }
 
 function parseJsonField<T>(raw: string | null, fallback: T): T {
@@ -263,6 +285,8 @@ function rowToEdge(r: GraphEdgeRow): GraphEdge {
     modelVersion: r.model_version ?? undefined,
     explanation: r.explanation ?? undefined,
     createdAt: r.created_at,
+    inferenceType: r.inference_type ? (r.inference_type as GraphEdge["inferenceType"]) : undefined,
+    matchedTerms: parseJsonField<string[]>(r.matched_terms_json, []),
   };
 }
 
@@ -278,12 +302,15 @@ function rowToEvidence(r: EvidenceRow): Evidence {
   };
 }
 
-export function getSongsByYear(year: number, region: string = "US"): Song[] {
-  const rows = all<SongRow>(
-    `SELECT * FROM songs WHERE year = ? AND region = ? ORDER BY chart_rank ASC`,
-    year,
-    region
-  );
+export function getSongsByYear(year: number, region: string = "US", limit?: number): Song[] {
+  const rows = limit
+    ? all<SongRow>(
+      `SELECT * FROM songs WHERE year = ? AND region = ? ORDER BY chart_rank ASC LIMIT ?`,
+      year,
+      region,
+      limit
+    )
+    : all<SongRow>(`SELECT * FROM songs WHERE year = ? AND region = ? ORDER BY chart_rank ASC`, year, region);
   return rows.map(rowToSong);
 }
 
@@ -292,6 +319,19 @@ export function getAllSongs(): Song[] {
     `SELECT * FROM songs ORDER BY year ASC, chart_rank ASC`
   );
   return rows.map(rowToSong);
+}
+
+export function getSongsByIds(ids: string[]): Song[] {
+  if (ids.length === 0) return [];
+  const unique = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean)));
+  if (unique.length === 0) return [];
+  const placeholders = unique.map(() => "?").join(",");
+  const rows = all<SongRow>(
+    `SELECT * FROM songs WHERE id IN (${placeholders})`,
+    ...unique
+  );
+  const byId = new Map(rows.map((r) => [r.id, rowToSong(r)]));
+  return unique.map((id) => byId.get(id)).filter((s): s is Song => Boolean(s));
 }
 
 export function getSongById(id: string): Song | null {
@@ -306,6 +346,25 @@ export function getAllEvents(): WorldEvent[] {
 export function getEventById(id: string): WorldEvent | null {
   const r = get<EventRow>(`SELECT * FROM events WHERE id = ?`, id);
   return r ? rowToEvent(r) : null;
+}
+
+export function getEventArticles(eventId: string): EventArticle[] {
+  const rows = all<EventArticleRow>(
+    `SELECT id, event_id, source, source_url, title, published_at, summary
+       FROM event_articles
+      WHERE event_id = ?
+      ORDER BY COALESCE(published_at, '') DESC, title ASC`,
+    eventId
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    eventId: r.event_id,
+    source: r.source,
+    sourceUrl: r.source_url,
+    title: r.title,
+    publishedAt: r.published_at,
+    summary: r.summary,
+  }));
 }
 
 export function getGraphNode(id: string): GraphNode | null {
@@ -411,6 +470,22 @@ export function getEvidenceForEdge(edgeId: string): Evidence[] {
     `SELECT * FROM evidence WHERE edge_id = ? ORDER BY confidence DESC`,
     edgeId
   ).map(rowToEvidence);
+}
+
+export function getEvidenceForEdges(edgeIds: string[]): Record<string, Evidence[]> {
+  if (edgeIds.length === 0) return {};
+  const unique = Array.from(new Set(edgeIds.filter(Boolean)));
+  const placeholders = unique.map(() => "?").join(",");
+  const rows = all<EvidenceRow>(
+    `SELECT * FROM evidence WHERE edge_id IN (${placeholders}) ORDER BY edge_id, confidence DESC`,
+    ...unique
+  );
+  const out: Record<string, Evidence[]> = {};
+  for (const row of rows.map(rowToEvidence)) {
+    if (!out[row.edgeId]) out[row.edgeId] = [];
+    out[row.edgeId].push(row);
+  }
+  return out;
 }
 
 export function getYearThemes(year: number, region: string = "US", topN: number = 5): {

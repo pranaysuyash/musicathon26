@@ -45,6 +45,9 @@ Thumbs.db
 data/
 # ...except the hand-curated chart seed (source code, no licensing issue)
 !data/chart-seed.ts
+# ...the offline snapshots (lyrics + signals + graph) so the project can
+# run after the Musixmatch / Genius / Wikidata APIs become unavailable
+!data/snapshots/
 # ...and the runtime logs (gitignored, but kept locally for debug)
 !data/logs/
 data/logs/

@@ -175,6 +175,7 @@ export type SourceApi =
   | "cyanite"
   | "elevenlabs"
   | "manual"
+  | "gazetteer"
   // Analysis / extraction
   | "spacy"
   | "gliner"
@@ -194,7 +195,30 @@ export type EvidenceType =
   | "event_date_overlap"
   | "entity_match"
   | "embedding_similarity"
-  | "collaboration_credit";
+  | "collaboration_credit"
+  | "chart_delta"
+  | "signal_delta"
+  | "candidate_moment_match"
+  | "known_event_match"
+  | "song_cluster_membership"
+  | "chart_era_context"
+  | "temporal_overlap"
+  | "matched_term"
+  | "gazetteer_alias";
+
+export type InferenceType =
+  | "direct_lyric_reference"
+  | "theme_overlap"
+  | "temporal_alignment"
+  | "emotional_alignment"
+  | "emotional_shadow"
+  | "embedding_similarity"
+  | "song_cluster_inference"
+  | "curated_event_alignment"
+  | "manual_curation"
+  | "entity_match"
+  | "auto_curation"
+  | "hybrid";
 
 export interface GraphNode {
   id: string;
@@ -215,6 +239,8 @@ export interface GraphEdge {
   modelVersion?: string;
   explanation?: string;
   createdAt?: string;
+  inferenceType?: InferenceType;
+  matchedTerms?: string[];
 }
 
 export interface Evidence {

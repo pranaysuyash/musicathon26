@@ -95,6 +95,35 @@ export async function searchTrack(query: string, limit: number = 10): Promise<MX
   return body.track_list.map((t) => t.track);
 }
 
+export async function searchTrackByFields(
+  trackTitle: string,
+  artistName: string,
+  limit: number = 10
+): Promise<MXMTrack[]> {
+  const body = await call<MXMSearchResult>("track.search", {
+    q_track: trackTitle,
+    q_artist: artistName,
+    page_size: limit,
+    s_track_rating: "desc",
+  });
+  return body.track_list.map((t) => t.track);
+}
+
+export async function searchByCombined(
+  title: string,
+  artist: string,
+  limit: number = 10
+): Promise<MXMTrack[]> {
+  const cleanedTitle = title.replace(/\s+\(.*?\)\s*$/g, "").trim();
+  const cleanedArtist = artist.replace(/\s+(?:feat\.?|featuring|ft\.?|&|and|with)\b.*$/i, "").trim();
+  const body = await call<MXMSearchResult>("track.search", {
+    q: `${cleanedTitle} ${cleanedArtist}`,
+    page_size: limit,
+    s_track_rating: "desc",
+  });
+  return body.track_list.map((t) => t.track);
+}
+
 export async function getTrack(trackId: number): Promise<MXMTrack> {
   const body = await call<{ track: MXMTrack }>("track.get", { track_id: trackId });
   return body.track;

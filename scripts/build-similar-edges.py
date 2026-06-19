@@ -40,12 +40,21 @@ DB = REPO / "data" / "versesignal.db"
 
 
 def load_embeddings(conn: sqlite3.Connection) -> list[tuple[str, str, list[float]]]:
-    """Returns list of (song_id, model, vector) for all song embeddings."""
+    """Returns list of (song_id, model, vector) for all song embeddings.
+
+    Skips embeddings whose target_id has no graph_nodes row (orphan
+    embeddings from songs that were deduped or removed). Skipping
+    avoids a foreign-key violation in the insert step.
+    """
     rows = conn.execute(
         """
-        SELECT target_id, model, vector, dim FROM embeddings
-         WHERE target_type = 'song'
-         ORDER BY target_id
+        SELECT e.target_id, e.model, e.vector, e.dim FROM embeddings e
+         WHERE e.target_type = 'song'
+           AND EXISTS (
+             SELECT 1 FROM graph_nodes gn
+             WHERE gn.node_type = 'song' AND gn.id = 'versesignal:n:song:' || e.target_id
+           )
+         ORDER BY e.target_id
         """
     ).fetchall()
     out = []
@@ -90,6 +99,13 @@ def main() -> int:
     conn = sqlite3.connect(DB)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(graph_edges)").fetchall()}
+    if "inference_type" not in cols:
+        conn.execute("ALTER TABLE graph_edges ADD COLUMN inference_type TEXT")
+    if "matched_terms_json" not in cols:
+        conn.execute("ALTER TABLE graph_edges ADD COLUMN matched_terms_json TEXT")
+    conn.commit()
 
     t0 = time.time()
     embeddings = load_embeddings(conn)
@@ -155,8 +171,8 @@ def main() -> int:
             """
             INSERT INTO graph_edges
               (id, src_id, dst_id, edge_type, weight, confidence, evidence_ids_json,
-               source_api, model_version, explanation)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               source_api, model_version, inference_type, matched_terms_json, explanation)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 edge_id,
@@ -168,6 +184,8 @@ def main() -> int:
                 json.dumps([]),
                 "embedding",
                 model,
+                "embedding_similarity",
+                None,
                 f"Cosine similarity {weight:.3f} over lyrics embedding.",
             ),
         )

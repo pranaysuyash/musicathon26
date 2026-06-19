@@ -4,11 +4,30 @@ import { initDb } from "@/lib/db";
 import { getAllYears, REGION_LABELS, getYearSignals } from "@/lib/db/queries";
 import { TimelineScrubber } from "@/components/lens/timeline-scrubber";
 import { Pill } from "@/components/ui/primitives";
+import { t, resolveLocale, localePairs, type Locale } from "@/lib/i18n/strings";
+
+function buildLangPath(path: string, locale: Locale, query?: Record<string, string>) {
+  if (locale === "en") return path;
+  const params = new URLSearchParams();
+  Object.entries(query ?? {}).forEach(([key, value]) => {
+    params.set(key, value);
+  });
+  return `${path}?lang=${locale}${params.toString() ? `&${params}` : ""}`;
+}
 
 export const metadata: Metadata = {
   title: "Timeline scrubber",
   description:
     "Scrub through years quickly and jump into regional lenses from a temporal heat-strip style control.",
+  openGraph: {
+    images: [
+      {
+        url: "/api/og?type=scrub&title=Timeline%20Scrubber&subtitle=Move%20across%20years%20and%20enter%20the%20lens%20for%20each%20era",
+        width: 1200,
+        height: 630,
+      },
+    ],
+  },
 };
 
 function resolveRegion(region: string | undefined): string {
@@ -27,10 +46,11 @@ function resolveYear(yearRaw: string | undefined, allYears: { year: number; song
 export default function ScrubPage({
   searchParams,
 }: {
-  searchParams: { region?: string; year?: string };
+  searchParams: { region?: string; year?: string; lang?: string };
 }) {
   initDb();
 
+  const locale = resolveLocale(searchParams.lang);
   const region = resolveRegion(searchParams.region);
   const allYears = getAllYears(region);
   const currentYear = resolveYear(searchParams.year, allYears);
@@ -39,21 +59,39 @@ export default function ScrubPage({
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
-      <Link href="/" className="text-xs text-ink-400 hover:text-ink-200">
+      <div className="mb-4 flex flex-wrap gap-2 text-xs">
+        {localePairs.map(({ code, key }) => {
+          const href = buildLangPath("/scrub", code, { region, year: String(currentYear) });
+          return (
+            <a
+              key={code}
+              href={href}
+              className={`rounded-full border px-2.5 py-1 transition ${
+                locale === code
+                  ? "border-signal-300 bg-signal-300/10 text-signal-200"
+                  : "border-ink-700 text-ink-400 hover:border-signal-300/70 hover:text-signal-200"
+              }`}
+            >
+              {t(locale, key)}
+            </a>
+          );
+        })}
+      </div>
+
+      <Link href={buildLangPath("/", locale)} className="text-xs text-ink-400 hover:text-ink-200">
         ← VerseSignal home
       </Link>
 
       <header className="mt-4">
         <div className="flex flex-wrap items-center gap-2">
-          <Pill variant="signal">TIMELINE SCRUBBER</Pill>
+          <Pill variant="signal">{t(locale, "scrub.title")}</Pill>
           <Pill variant="mute">{REGION_LABELS[region]}</Pill>
         </div>
         <h1 className="h-display mt-2 text-4xl font-semibold tracking-tight md:text-6xl">
           Jump by year · {region}
         </h1>
         <p className="mt-3 max-w-3xl text-sm text-ink-300">
-          Use the scrubber to move across time in the current region and jump into lens pages where
-          signals, events, and songs are already precomputed.
+          {t(locale, "scrub.description")}
         </p>
       </header>
 
@@ -68,9 +106,9 @@ export default function ScrubPage({
                 className="rounded-lg border border-ink-700 bg-ink-900 px-2.5 py-1.5 text-xs text-ink-200"
               >
                 {Object.entries(REGION_LABELS).map(([code, label]) => (
-                  <option key={code} value={code}>
-                    {label}
-                  </option>
+              <option key={code} value={code}>
+                {label}
+              </option>
                 ))}
               </select>
             </label>
@@ -92,10 +130,10 @@ export default function ScrubPage({
               Go
             </button>
           </form>
-          <Link
-            href="/scrub?region=US"
-            className="ml-auto rounded-lg border border-ink-700 px-3 py-1.5 text-xs hover:border-ink-600"
-          >
+            <Link
+              href={buildLangPath("/scrub?region=US", locale)}
+              className="ml-auto rounded-lg border border-ink-700 px-3 py-1.5 text-xs hover:border-ink-600"
+            >
             Reset
           </Link>
         </div>
@@ -117,7 +155,10 @@ export default function ScrubPage({
             Songs indexed in this slice: {allYears.find((y) => y.year === currentYear)?.songCount ?? 0}
           </p>
           <div className="mt-4">
-            <Link href={`/lens/${currentYear}?region=${region}`} className="text-xs text-signal-300 hover:text-signal-200">
+            <Link
+              href={buildLangPath(`/lens/${currentYear}?region=${region}`, locale)}
+              className="text-xs text-signal-300 hover:text-signal-200"
+            >
               Open full lens
             </Link>
           </div>

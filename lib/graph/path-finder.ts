@@ -24,6 +24,8 @@ interface RawEdge {
   model_version: string | null;
   explanation: string | null;
   created_at: string;
+  inference_type: string | null;
+  matched_terms_json: string | null;
 }
 
 export interface GraphData {
@@ -38,6 +40,16 @@ export interface GraphData {
 let _cache: GraphData | null = null;
 let _cacheBuiltAt = 0;
 const CACHE_TTL_MS = 30_000; // 30s — invalidates after re-enrich
+
+function parseJsonList<T>(raw: string | null, fallback: T[]): T[] {
+  if (!raw) return fallback;
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as T[]) : fallback;
+  } catch {
+    return fallback;
+  }
+}
 
 export function loadGraph(force = false): GraphData {
   if (!force && _cache && Date.now() - _cacheBuiltAt < CACHE_TTL_MS) {
@@ -66,6 +78,8 @@ export function loadGraph(force = false): GraphData {
       modelVersion: r.model_version ?? undefined,
       explanation: r.explanation ?? undefined,
       createdAt: r.created_at,
+      inferenceType: r.inference_type ? (r.inference_type as GraphEdge["inferenceType"]) : undefined,
+      matchedTerms: parseJsonList<string>(r.matched_terms_json, []),
     };
     if (!forward.has(r.src_id)) forward.set(r.src_id, []);
     forward.get(r.src_id)!.push({ dstId: r.dst_id, edge });

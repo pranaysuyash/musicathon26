@@ -60,7 +60,7 @@ def build_theme_profiles(conn: sqlite3.Connection) -> int:
         pid = f"versesignal:ysp:{year}:{REGION}:theme:{slug(theme)}"
         ids = song_ids.split(",") if song_ids else []
         conn.execute("""
-            INSERT INTO year_signal_profiles
+            INSERT OR REPLACE INTO year_signal_profiles
               (id, year, region, signal_type, signal, score, song_count,
                evidence_song_ids_json, source_api, computed_at)
             VALUES (?, ?, ?, 'theme', ?, ?, ?, ?, 'theme_scores', datetime('now'))
@@ -90,7 +90,7 @@ def build_mood_profiles(conn: sqlite3.Connection) -> int:
         pid = f"versesignal:ysp:{year}:{REGION}:mood:{slug(mood)}"
         ids = song_ids.split(",") if song_ids else []
         conn.execute("""
-            INSERT INTO year_signal_profiles
+            INSERT OR REPLACE INTO year_signal_profiles
               (id, year, region, signal_type, signal, score, song_count,
                evidence_song_ids_json, source_api, computed_at)
             VALUES (?, ?, ?, 'mood', ?, ?, ?, ?, 'mood_scores', datetime('now'))
@@ -133,7 +133,7 @@ def build_entity_profiles(conn: sqlite3.Connection) -> int:
                 pid = f"versesignal:ysp:{year}:{REGION}:entity:{slug(name)}"
                 ids = song_ids.split(",") if song_ids else []
                 conn.execute("""
-                    INSERT INTO year_signal_profiles
+                    INSERT OR REPLACE INTO year_signal_profiles
                       (id, year, region, signal_type, signal, score, song_count,
                        evidence_song_ids_json, source_api, computed_at)
                     VALUES (?, ?, ?, 'entity', ?, ?, ?, ?, 'entity_mentions', datetime('now'))

@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import "./globals.css";
 
 import { TelemetryReporter } from "@/components/telemetry/telemetry-reporter";
+import { resolveLocale } from "@/lib/i18n/strings";
 
 export const metadata: Metadata = {
   metadataBase: new URL(
@@ -50,9 +52,16 @@ export const viewport = {
   initialScale: 1,
 };
 
+function detectLocaleFromHeaders() {
+  const header = headers().get("accept-language")?.toLowerCase() ?? "";
+  if (header.startsWith("es") || header.includes("es-")) return "es";
+  return "en";
+}
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const locale = detectLocaleFromHeaders();
   return (
-    <html lang="en">
+    <html lang={locale}>
       <body className="scrollbar-thin">
         <a
           href="#main"

@@ -16,6 +16,15 @@ export const metadata: Metadata = {
   title: "Data health",
   description:
     "Operator-facing dashboard: corpus summary, source breakdown, coverage, integrity issues, and intent-vs-actual for the VerseSignal corpus.",
+  openGraph: {
+    images: [
+      {
+        url: "/api/og?type=health&title=VerseSignal%20Data%20Health&subtitle=Operator-facing%20corpus%20readiness%20and%20integrity%20surface",
+        width: 1200,
+        height: 630,
+      },
+    ],
+  },
 };
 
 async function fetchHealth(): Promise<DataHealth | null> {
@@ -31,7 +40,10 @@ function pct(n: number) {
 }
 
 function progressBar(pctVal: number) {
-  const filled = Math.round(pctVal / 5);
+  // Clamp to [0, 100] before mapping to 0–20 chars. Negative or >100
+  // inputs (e.g. from derived deltas) would otherwise crash String.repeat.
+  const safe = Math.max(0, Math.min(100, Number.isFinite(pctVal) ? pctVal : 0));
+  const filled = Math.round(safe / 5);
   const total = 20;
   return "#".repeat(filled) + "-".repeat(total - filled);
 }
@@ -242,7 +254,65 @@ export default async function DataHealthPage() {
           ))}
         </ul>
       </section>
+
+      {/* Histograms: confidence + evidence per edge */}
+      <section className="mt-10">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-ink-500">
+          Trust-layer histograms
+        </h2>
+        <p className="mt-1 mb-3 text-sm text-ink-400">
+          Edge confidence distribution + how many evidence rows per edge. The trust layer requires every edge to be backed by ≥1 evidence row.
+        </p>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <Histogram
+            title="Edge confidence"
+            buckets={data.confidence_histogram}
+            color="bg-signal-500/60"
+          />
+          <Histogram
+            title="Evidence rows per edge"
+            buckets={data.evidence_per_edge_histogram}
+            color="bg-echo-500/60"
+          />
+        </div>
+      </section>
     </main>
+  );
+}
+
+function Histogram({
+  title,
+  buckets,
+  color,
+}: {
+  title: string;
+  buckets: { bucket: string; count: number }[];
+  color: string;
+}) {
+  const max = Math.max(1, ...buckets.map((b) => b.count));
+  return (
+    <div className="card p-4">
+      <h3 className="text-sm font-semibold text-ink-100">{title}</h3>
+      <ul className="mt-3 space-y-1.5">
+        {buckets.map((b) => {
+          const widthPct = (b.count / max) * 100;
+          return (
+            <li key={b.bucket} className="flex items-center gap-2 text-xs">
+              <span className="w-16 font-mono text-ink-400">{b.bucket}</span>
+              <div className="h-4 flex-1 rounded bg-ink-900/60">
+                <div
+                  className={`h-4 rounded ${color}`}
+                  style={{ width: `${widthPct}%` }}
+                />
+              </div>
+              <span className="w-14 text-right tabular-nums text-ink-300">
+                {b.count.toLocaleString()}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 

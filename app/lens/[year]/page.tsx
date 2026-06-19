@@ -18,8 +18,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { getYearSignals, getYearSignalTop, getSongsByYear, getEventsForYear, getSignalClusters, getCandidateContexts, getContradictions, getEchoingEvents, getPostureSummary, getEventCorrelations, getCulturalSignalBrief, getAllYears, REGION_LABELS, getDataHealth, getAnalogousYears, getSignalYearDistributions } from "@/lib/db/queries";
+import { getYearSignals, getYearSignalTop, getSongsByYear, getEventsForYear, getSignalClusters, getCandidateContexts, getContradictions, getEchoingEvents, getPostureSummary, getEventCorrelations, getCulturalSignalBrief, getAllYears, REGION_LABELS, getDataHealth, getAnalogousYears, getSignalYearDistributions, getSongsByIds } from "@/lib/db/queries";
 import { Pill } from "@/components/ui/primitives";
+import { BecauseCard } from "@/components/evidence/because-card";
+import { EvidencePreview } from "@/components/evidence/evidence-preview";
 import { StoryNextStep } from "@/components/story/story-next-step";
 import { TimelineScrubber } from "@/components/lens/timeline-scrubber";
 import { RegionPicker } from "@/components/lens/region-picker";
@@ -27,6 +29,14 @@ import { DataHealthCard } from "@/components/lens/data-health";
 import { AnalogousYearsSection } from "@/components/lens/analogous-years";
 import { SignalYearDistribution } from "@/components/lens/signal-year-distribution";
 import { YearInsightPlayer } from "@/components/lens/year-insight-player";
+import { t, resolveLocale, localePairs, type Locale } from "@/lib/i18n/strings";
+import type { EvidencePreviewItem } from "@/components/evidence/evidence-preview";
+import type { Song } from "@/lib/types";
+
+function buildLangPath(path: string, locale: Locale) {
+  const hasQuery = path.includes("?");
+  return locale === "en" ? path : `${path}${hasQuery ? "&" : "?"}lang=${locale}`;
+}
 
 export async function generateMetadata({
   params,
@@ -49,11 +59,12 @@ export default async function LensPage({
   searchParams,
 }: {
   params: { year: string };
-  searchParams: { region?: string };
+  searchParams: { region?: string; lang?: string };
 }) {
   const year = Number(params.year);
   if (!Number.isFinite(year)) notFound();
 
+  const locale = resolveLocale(searchParams.lang);
   const region = (searchParams.region ?? "US") in REGION_LABELS ? (searchParams.region ?? "US") : "US";
   const allYears = getAllYears(region);
   const dataHealth = getDataHealth();
@@ -62,7 +73,7 @@ export default async function LensPage({
   const entityDistributions = getSignalYearDistributions("entity", region);
   const signals = getYearSignals(year, region, 60);
   const brief = await getCulturalSignalBrief(year, region);
-  const songs = getSongsByYear(year, region);
+  const songs = getSongsByYear(year, region, 100);
   const events = getEventsForYear(year, region);
   const eventCorrelations: Record<string, ReturnType<typeof getEventCorrelations>> = {};
   for (const ev of events) {
@@ -74,6 +85,10 @@ export default async function LensPage({
   const contradictions = getContradictions(year, 8, region);
   const echoes = getEchoingEvents(year, region);
   const postureSummary = getPostureSummary(year, region);
+  const briefEvidenceSongIds = Array.from(new Set(brief.sections.flatMap((s) => s.evidenceSongIds)));
+  const briefEvidenceSongs = getSongsByIds(briefEvidenceSongIds);
+  const briefEvidenceSongById = new Map(briefEvidenceSongs.map((s) => [s.id, s] as const));
+  const briefSourceApi = Array.from(new Set(top.map((s) => s.sourceApi)));
 
   // Group signals by type
   const themes = signals.filter((s) => s.signalType === "theme").slice(0, 8);
@@ -85,16 +100,35 @@ export default async function LensPage({
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
+      <div className="mb-4 flex flex-wrap gap-2 text-xs">
+        {localePairs.map(({ code, key }) => {
+          const href = buildLangPath(`/lens/${year}?region=${region}`, code);
+          return (
+            <a
+              key={code}
+              href={href}
+              className={`rounded-full border px-2.5 py-1 transition ${
+                locale === code
+                  ? "border-signal-300 bg-signal-300/10 text-signal-200"
+                  : "border-ink-700 text-ink-400 hover:border-signal-300/70 hover:text-signal-200"
+              }`}
+            >
+              {t(locale, key)}
+            </a>
+          );
+        })}
+      </div>
+
       <Link
-        href={`/year/${year}`}
+        href={buildLangPath(`/year/${year}`, locale)}
         className="text-xs text-ink-400 hover:text-ink-200"
       >
-        ← {year} (raw year view)
+        ← {t(locale, "common.back")} {year} (raw year view)
       </Link>
 
       <header className="mt-4 mb-10">
         <div className="flex items-center gap-2">
-          <Pill variant="signal">CULTURAL LENS</Pill>
+          <Pill variant="signal">{t(locale, "lens.title")}</Pill>
           <Pill variant="mute">{REGION_LABELS[region] ?? region}</Pill>
           <RegionPicker currentRegion={region} currentYear={year} />
         </div>
@@ -102,7 +136,7 @@ export default async function LensPage({
           {year}
         </h1>
         <p className="mt-3 text-lg text-ink-300">
-          What were the charts saying in {year}?
+          {t(locale, "lens.subtitle")} {year}?
         </p>
         <div className="mt-6">
           <TimelineScrubber years={allYears} currentYear={year} />
@@ -111,10 +145,10 @@ export default async function LensPage({
 
       <section className="mb-10">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-ink-500">
-          Voice of the year
+          {t(locale, "lens.voice-title")}
         </h2>
         <p className="mt-1 mb-4 text-sm text-ink-400">
-          Region-aware narrated cultural brief for {REGION_LABELS[region] ?? region}.
+          {t(locale, "lens.voice-subtitle")} {REGION_LABELS[region] ?? region}.
         </p>
         <YearInsightPlayer year={year} region={region} />
       </section>
@@ -129,6 +163,35 @@ export default async function LensPage({
         <p className="mt-1 text-sm text-ink-400">
           A 6-paragraph narrative of what the charts were doing in {year}, evidence-backed.
         </p>
+        <div className="mt-4">
+          <BecauseCard
+            claim={`Why the ${year} lens is not just a narrative`}
+            reasons={[
+              top.length > 0
+                ? `Primary signal: ${top[0]?.signal ?? "mixed signals"} (${top[0]?.songCount ?? 0} songs, ${((top[0]?.score ?? 0) * 100).toFixed(0)}%).`
+                : "Primary signal: data sparse in this year.",
+              `${moods.length} mood, ${themes.length} theme, and ${entities.length} entity tracks anchor this claim.`,
+              events.length > 0 ? `${events.length} curated event(s) overlap this year.` : "No curated event overlap was detected for this year.",
+              postureSummary.length > 0
+                ? `${postureSummary.reduce((acc, item) => acc + item.songCount, 0)} song-event classification records are tied to this year's posture model.`
+                : "Posture data is not available for this year.",
+            ]}
+            confidence={top[0]?.score ?? 0.54}
+            provenanceSources={briefSourceApi.length > 0 ? briefSourceApi : ["billboard"]}
+            evidenceRows={briefEvidenceSongs
+              .slice(0, 3)
+              .map<EvidencePreviewItem>((song) => ({
+                id: song.id,
+                title: "Representative song",
+                text: `${song.title} — ${song.artist} (${song.year})`,
+                source: "chart_entry",
+                matchedTerms: [],
+              }))}
+            evidencePreviewTitle="Representative songs"
+            caveat="Inference is aggregate signal inference, not a single direct source quote."
+            inferenceType={top.length > 0 ? "hybrid" : undefined}
+          />
+        </div>
         <ol className="mt-6 space-y-6">
           {brief.sections.map((s, i) => (
             <li key={i} className="border-l-2 border-signal-500/40 pl-5">
@@ -141,6 +204,38 @@ export default async function LensPage({
               <p className="mt-2 text-sm leading-relaxed text-ink-200">
                 {s.body}
               </p>
+              {s.evidenceSongIds.length > 0 ? (
+                <div className="mt-3">
+                  <BecauseCard
+                    claim={s.heading}
+                    reasons={splitReasonsFromBriefBody(s.body)}
+                    confidence={Math.min(0.95, 0.3 + Math.min(0.6, s.evidenceSongIds.length / 12))}
+                    provenanceSources={[inferSectionEvidenceSource(s.heading), "chart_entry"]}
+                    evidenceRows={s.evidenceSongIds
+                      .slice(0, 3)
+                      .map((songId) => {
+                        const song = briefEvidenceSongById.get(songId);
+                        if (!song) return null;
+                        return {
+                          id: song.id,
+                          title: "Song evidence",
+                          text: `${song.title} — ${song.artist} (${song.year})`,
+                          source: inferSectionEvidenceSource(s.heading),
+                          confidence: Math.max(0.2, Math.min(0.98, 1 - song.chartRank / 100)),
+                          matchedTerms: [],
+                        } as EvidencePreviewItem;
+                      })
+                      .filter((r): r is EvidencePreviewItem => Boolean(r))}
+                    evidencePreviewTitle="Representative songs"
+                  />
+                </div>
+              ) : (
+                <EvidencePreview
+                  title="Evidence"
+                  items={[]}
+                  maxItems={1}
+                />
+              )}
               {s.evidenceSongIds.length > 0 ? (
                 <p className="mt-1.5 text-[10px] text-ink-500">
                   Songs cited: {s.evidenceSongIds.slice(0, 3).map((id) => id.split(":").pop()?.split("-").slice(0, 2).join(" ")).filter(Boolean).join(" · ")}
@@ -410,16 +505,34 @@ export default async function LensPage({
         </section>
       ) : null}
 
+      <section className="mb-10">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-ink-500">
+          Open the full graph for this lens year
+        </h2>
+        <div className="card p-5">
+          <p className="mb-3 text-sm text-ink-300">
+            Dive from this lens summary into the neighborhood graph: songs, themes, moods, entities, and linked events
+            for {year}. Use this as your next step to inspect edge-level evidence.
+          </p>
+          <Link
+            href={`/graph?rootType=year&rootId=versesignal:n:year:${year}`}
+            className="inline-block rounded-lg bg-signal-500 px-5 py-2.5 text-sm font-medium text-ink-950 transition hover:bg-signal-400"
+          >
+            Open {year} graph →
+          </Link>
+        </div>
+      </section>
+
       {/* Top songs by chart rank */}
       <section>
         <h2 className="text-xs font-semibold uppercase tracking-wider text-ink-500">
           The chart spine
         </h2>
         <p className="mt-1 mb-4 text-sm text-ink-400">
-          The top 25 songs that anchored the year.
+          The top {Math.min(100, songs.length)} songs that anchored the year.
         </p>
         <ol className="card divide-y divide-ink-800/60">
-          {songs.slice(0, 25).map((s) => (
+          {songs.slice(0, 100).map((s) => (
             <li key={s.id} className="flex items-center gap-3 p-3 text-sm">
               <span className="w-6 text-right font-semibold tabular-nums text-ink-500">
                 {s.chartRank}
@@ -557,4 +670,24 @@ function buildTakeaway(
     );
   }
   return lines.join("");
+}
+
+function splitReasonsFromBriefBody(body: string): string[] {
+  return body
+    .split(/[.!?]\s*/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 3)
+    .map((line) => `${line}.`);
+}
+
+function inferSectionEvidenceSource(heading: string): string {
+  const key = heading.toLowerCase();
+  if (key.includes("emotional") || key.includes("weather")) return "mood_scores";
+  if (key.includes("lyric")) return "lyric_line";
+  if (key.includes("theme")) return "theme_scores";
+  if (key.includes("name") || key.includes("entity") || key.includes("person") || key.includes("place")) return "gliner";
+  if (key.includes("mood")) return "mood_scores";
+  if (key.includes("event") || key.includes("posture") || key.includes("shift")) return "hybrid";
+  return "chart_entry";
 }

@@ -23,7 +23,17 @@ export async function generateMetadata({ params }: { params: { entity: string } 
   const entity = getEntityProfile(decodeRouteParam(params.entity));
   if (!entity) return { title: "Entity not found" };
   return {
-    title: `${entity.canonicalName} — Entity`
+    title: `${entity.canonicalName} — Entity`,
+    description: `Entity-level lens for ${entity.canonicalName} across themes, events, and song mentions.`,
+    openGraph: {
+      images: [
+        {
+          url: `/api/og?type=entity&title=${encodeURIComponent(entity.canonicalName)}&subtitle=${encodeURIComponent(`Where ${entity.canonicalName} appears in chart culture`)}`,
+          width: 1200,
+          height: 630,
+        },
+      ],
+    },
   };
 }
 
@@ -31,7 +41,7 @@ export default function EntityPage({ params }: { params: { entity: string } }) {
   const entity = getEntityProfile(decodeRouteParam(params.entity));
   if (!entity) notFound();
 
-  const songs = getSongsMentioningEntity(entity.id, 50);
+  const songs = getSongsMentioningEntity(entity.id, 100);
   const themes = getEntityThemeSignals(entity.id, 12);
   const events = getEntityEventLinks(entity.id, 12);
 
@@ -69,7 +79,7 @@ export default function EntityPage({ params }: { params: { entity: string } }) {
           {uniqueSongs.length === 0 ? (
             <li className="p-4 text-sm text-ink-500">No explicit song mentions yet.</li>
           ) : (
-            uniqueSongs.slice(0, 50).map((song) => (
+            uniqueSongs.slice(0, 100).map((song) => (
               <li key={song.songId} className="flex items-center gap-3 p-3 text-sm">
                 <Pill variant="echo">{song.source}</Pill>
                 <Link

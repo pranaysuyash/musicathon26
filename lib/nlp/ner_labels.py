@@ -47,20 +47,32 @@ NER_LABELS: list[str] = [
     "tv show title",
     "book title",
     "brand",
+    "fashion brand",
     "luxury brand",
-    "technology",
-    "social platform",
+    "tech company",
+    "social media platform",
+    "streaming platform",
+    "car brand",
+    "sports brand",
+    "fragrance or cosmetics brand",
     # Substances / objects
-    "drug or substance",
+    "drug",
+    "narcotic",
     "alcoholic drink",
     "weapon",
     "vehicle",
+    "luxury vehicle",
     "money object",
     "clothing brand",
     "food",
+    "body part",
+    "color",
     # Abstract / cultural
     "mythological figure",
     "religious text",
+    "emotion",
+    "color descriptor",
+    "profanity or slur",
 ]
 
 # Confidence threshold per label. Some labels are easier to get
@@ -90,23 +102,35 @@ LABEL_THRESHOLDS: dict[str, float] = {
     "tv show title": 0.55,
     "book title": 0.55,
     "brand": 0.55,
+    "fashion brand": 0.6,
     "luxury brand": 0.6,
-    "technology": 0.55,
-    "social platform": 0.55,
-    "drug or substance": 0.6,
+    "tech company": 0.55,
+    "social media platform": 0.55,
+    "streaming platform": 0.55,
+    "car brand": 0.55,
+    "sports brand": 0.55,
+    "fragrance or cosmetics brand": 0.6,
+    "drug": 0.6,
+    "narcotic": 0.65,
     "alcoholic drink": 0.6,
     "weapon": 0.65,
     "vehicle": 0.55,
+    "luxury vehicle": 0.6,
     "money object": 0.6,
     "clothing brand": 0.6,
     "food": 0.55,
+    "body part": 0.5,
+    "color": 0.45,
     "mythological figure": 0.65,
     "religious text": 0.6,
+    "emotion": 0.5,
+    "color descriptor": 0.5,
+    "profanity or slur": 0.6,
 }
 
 DEFAULT_NER_THRESHOLD: float = 0.55
 
-LABELS_VERSION: str = "2026-06-16.1"
+LABELS_VERSION: str = "2026-06-18.1"
 
 
 def get_threshold(label: str) -> float:
