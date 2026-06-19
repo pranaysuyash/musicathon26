@@ -436,31 +436,37 @@ export function searchGraphNodes(
   return rows.map(rowToNode);
 }
 
-export function getNodeNeighborhood(nodeId: string, hops: number = 2, limit: number = 250): {
+export function getNodeNeighborhood(nodeId: string, hops: number = 2, limit: number = 1000): {
   nodes: GraphNode[];
   edges: GraphEdge[];
 } {
+  // BFS from `nodeId` for `hops` hops. We walk the graph as an
+  // UNDIRECTED set: each step visits every edge that touches any
+  // node we've already reached. The earlier walk tracked ordered
+  // (src, dst) tuples and only matched edges in one direction,
+  // so a year→song→theme traversal stopped at the second hop.
+  // Fix: store the node reached (not the pair), then resolve all
+  // edges at the end via (src_id, dst_id) IN (walk set).
   const edgeRows = all<GraphEdgeRow>(
     `
-    WITH RECURSIVE walk(src, dst, depth) AS (
-      SELECT src_id, dst_id, 1 FROM graph_edges
-        WHERE src_id = ? OR dst_id = ?
+    WITH RECURSIVE walk(node, depth) AS (
+      SELECT ?, 1
       UNION
-      SELECT e.src_id, e.dst_id, w.depth + 1
+      SELECT CASE WHEN e.src_id = w.node THEN e.dst_id ELSE e.src_id END,
+             w.depth + 1
         FROM graph_edges e
-        JOIN walk w ON (e.src_id = w.dst OR e.dst_id = w.src)
+        JOIN walk w ON (e.src_id = w.node OR e.dst_id = w.node)
         WHERE w.depth < ?
     )
     SELECT DISTINCT ge.* FROM graph_edges ge
-      WHERE (ge.src_id, ge.dst_id) IN (
-        SELECT src, dst FROM walk
-      )
+      WHERE ge.src_id IN (SELECT node FROM walk)
+        AND ge.dst_id IN (SELECT node FROM walk)
+        AND NOT (ge.src_id = ge.dst_id)
       LIMIT ?
     `,
     nodeId,
-    nodeId,
     hops,
-    limit
+    limit,
   );
 
   const edges = edgeRows.map(rowToEdge);
