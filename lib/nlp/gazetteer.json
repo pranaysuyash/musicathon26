@@ -503,68 +503,16 @@
     "canonical": "Drake (Aubrey Drake Graham)",
     "type": "artist"
   },
-  "lean": {
-    "canonical": "lean (purple drank)",
-    "type": "drug"
-  },
-  "purple": {
-    "canonical": "lean (purple drank, slang)",
-    "type": "drug"
-  },
-  "drank": {
-    "canonical": "lean (purple drank, slang)",
-    "type": "drug"
-  },
-  "syrup": {
-    "canonical": "lean (purple drank, slang)",
-    "type": "drug"
-  },
   "lean and": {
     "canonical": "lean (purple drank)",
-    "type": "drug"
-  },
-  "codeine": {
-    "canonical": "codeine (drug)",
-    "type": "drug"
-  },
-  "perc": {
-    "canonical": "Percocet (slang)",
     "type": "drug"
   },
   "percocet": {
     "canonical": "Percocet",
     "type": "drug"
   },
-  "oxy": {
-    "canonical": "oxycodone (slang)",
-    "type": "drug"
-  },
   "oxycontin": {
     "canonical": "oxycodone",
-    "type": "drug"
-  },
-  "molly": {
-    "canonical": "MDMA (slang)",
-    "type": "drug"
-  },
-  "percs": {
-    "canonical": "Percocet (slang)",
-    "type": "drug"
-  },
-  "xan": {
-    "canonical": "Xanax (slang)",
-    "type": "drug"
-  },
-  "xanny": {
-    "canonical": "Xanax (slang)",
-    "type": "drug"
-  },
-  "xans": {
-    "canonical": "Xanax (slang)",
-    "type": "drug"
-  },
-  "addy": {
-    "canonical": "Adderall (slang)",
     "type": "drug"
   },
   "addy pill": {
@@ -573,30 +521,6 @@
   },
   "oxy pill": {
     "canonical": "oxycodone",
-    "type": "drug"
-  },
-  "snow": {
-    "canonical": "cocaine (slang)",
-    "type": "drug"
-  },
-  "blow": {
-    "canonical": "cocaine (slang)",
-    "type": "drug"
-  },
-  "gas": {
-    "canonical": "gasoline (scent slang)",
-    "type": "drug"
-  },
-  "wok": {
-    "canonical": "cocaine (slang)",
-    "type": "drug"
-  },
-  "perky": {
-    "canonical": "Percocet (slang)",
-    "type": "drug"
-  },
-  "loud": {
-    "canonical": "marijuana (slang)",
     "type": "drug"
   },
   "gas station": {
@@ -643,10 +567,6 @@
     "canonical": ".40 caliber ammunition",
     "type": "weapon"
   },
-  "strap": {
-    "canonical": "gun (slang)",
-    "type": "weapon"
-  },
   "strap on me": {
     "canonical": "gun (slang)",
     "type": "weapon"
@@ -659,8 +579,5 @@
     "canonical": "pistol (slang)",
     "type": "weapon"
   },
-  "ratchet": {
-    "canonical": "ratchet (slang)",
-    "type": "profanity or slur"
-  }
+  "_version": "2026-06-19.2"
 }

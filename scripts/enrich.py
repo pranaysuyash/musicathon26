@@ -495,7 +495,14 @@ def run_ner(p: Pipeline, lyrics: str) -> list[dict]:
                 phrase_lc = phrase.lower()
                 # Choose boundary characters that keep the phrase
                 # intact but exclude word characters at the start/end.
-                if re.match(r"^[A-Za-z0-9]", phrase_lc) and re.match(r"[A-Za-z0-9]$", phrase_lc):
+                # NOTE: re.match anchors at start, so re.match(r"...$", "ak")
+                # returns None (not 'k' at position 1). We must check
+                # the last character directly with str indexing or a
+                # lookahead. Use phrase_lc[:1].isalnum() and
+                # phrase_lc[-1:].isalnum() to keep it readable.
+                first_alnum = bool(phrase_lc) and phrase_lc[:1].isalnum()
+                last_alnum = bool(phrase_lc) and phrase_lc[-1:].isalnum()
+                if first_alnum and last_alnum:
                     pattern = re.compile(r"\b" + re.escape(phrase_lc) + r"\b", re.IGNORECASE)
                 else:
                     pattern = re.compile(re.escape(phrase_lc), re.IGNORECASE)
