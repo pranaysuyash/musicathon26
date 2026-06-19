@@ -85,8 +85,20 @@ export default async function LensPage({
   const echoes = getEchoingEvents(year, region);
   const postureSummary = getPostureSummary(year, region);
   const briefEvidenceSongIds = Array.from(new Set(brief.sections.flatMap((s) => s.evidenceSongIds)));
+  // Per motto 0.11, dedup on (title, year) so the brief's
+  // Representative Songs list doesn't show the same Careless
+  // Whisper three times just because the brief's three sections
+  // (mood/theme/entity) all cited the only 1985 song in the
+  // corpus. The chart year 1985 has 1 song, so 3 representative
+  // references is misleading.
   const briefEvidenceSongs = getSongsByIds(briefEvidenceSongIds);
-  const briefEvidenceSongById = new Map(briefEvidenceSongs.map((s) => [s.id, s] as const));
+  const byYearTitle = new Map<string, ReturnType<typeof getSongsByIds>[number]>();
+  for (const s of briefEvidenceSongs) {
+    const k = `${s.year}::${s.title.toLowerCase()}`;
+    if (!byYearTitle.has(k)) byYearTitle.set(k, s);
+  }
+  const briefEvidenceSongsDeduped = Array.from(byYearTitle.values());
+  const briefEvidenceSongById = new Map(briefEvidenceSongsDeduped.map((s) => [s.id, s] as const));
   const briefSourceApi = Array.from(new Set(top.map((s) => s.sourceApi)));
   const compareYear = year === 2020 ? 1969 : 2020;
   const compareHref = buildLangPath(`/compare/${year}/${compareYear}${region !== "US" ? `?region=${region}` : ""}`, locale);
@@ -189,7 +201,7 @@ export default async function LensPage({
             ]}
             confidence={top[0]?.score ?? 0.54}
             provenanceSources={briefSourceApi.length > 0 ? briefSourceApi : ["billboard"]}
-            evidenceRows={briefEvidenceSongs
+            evidenceRows={briefEvidenceSongsDeduped
               .slice(0, 3)
               .map<EvidencePreviewItem>((song) => ({
                 id: song.id,

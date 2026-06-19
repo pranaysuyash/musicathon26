@@ -1655,7 +1655,7 @@ export async function getCulturalSignalBrief(
   const section1: BriefSection = {
     heading: "The chart's emotional weather",
     body: `Chart music in ${year} was led by ${topMoods[0]?.signal ?? "unknown"} (${topMoods[0]?.songCount ?? 0} chart songs), with ${topMoods[1]?.signal ?? "—"} and ${topMoods[2]?.signal ?? "—"} close behind. Compared to the prior 3-year baseline, the mood profile shifted: ${moodDeltas || "no deltas available"}.`,
-    evidenceSongIds: topMoods.flatMap((m) => m.evidenceSongIds).slice(0, 5),
+    evidenceSongIds: Array.from(new Set(topMoods.flatMap((m) => m.evidenceSongIds))).slice(0, 5),
     evidenceSignalIds: topMoods.map((m) => `versesignal:ysp:${year}:US:mood:${m.signal.replace(/\s+/g, "-")}`),
   };
 
@@ -1669,7 +1669,7 @@ export async function getCulturalSignalBrief(
       topThemes.length > 0
         ? `The themes most present in the year's chart were: ${topThemes.map((t) => `${t.signal.replace(/_/g, " ")} (${t.songCount} songs)`).join(", ")}.`
         : `Chart theme data is sparse for ${year}.`,
-    evidenceSongIds: topThemes.flatMap((t) => t.evidenceSongIds).slice(0, 5),
+    evidenceSongIds: Array.from(new Set(topThemes.flatMap((t) => t.evidenceSongIds))).slice(0, 5),
     evidenceSignalIds: topThemes.map((t) => `versesignal:ysp:${year}:US:theme:${t.signal}`),
   };
 
@@ -1683,7 +1683,7 @@ export async function getCulturalSignalBrief(
       topEntities.length > 0
         ? `Mentioned across the chart: ${topEntities.map((e) => `${e.signal} (${e.songCount} songs)`).join(", ")}.`
         : "",
-    evidenceSongIds: topEntities.flatMap((e) => e.evidenceSongIds).slice(0, 5),
+    evidenceSongIds: Array.from(new Set(topEntities.flatMap((e) => e.evidenceSongIds))).slice(0, 5),
     evidenceSignalIds: topEntities.map((e) => `versesignal:ysp:${year}:US:entity:${e.signal.replace(/\s+/g, "-")}`),
   };
 
