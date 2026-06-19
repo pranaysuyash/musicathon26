@@ -236,8 +236,8 @@ export default function YearPage({ params, searchParams }: PageProps) {
                 <li key={m.mood} className="flex items-center justify-between p-4">
                   <span className="text-sm font-medium text-ink-100 capitalize">{m.mood}</span>
                   <div className="flex items-center gap-3">
-                    <ConfidenceBar value={Math.min(1, m.avgScore / 10)} />
-                    <span className="text-xs tabular-nums text-ink-300">{m.avgScore.toFixed(2)}</span>
+                    <ConfidenceBar value={Math.min(1, m.avgScore / 100)} />
+                    <span className="text-xs tabular-nums text-ink-300">{m.avgScore.toFixed(1)}/100</span>
                   </div>
                 </li>
               ))

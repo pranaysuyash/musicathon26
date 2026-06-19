@@ -48,7 +48,7 @@ export function ThemeCloud({ items }: { items: ThemeCloudItem[] }) {
             >
               {THEME_LABELS[t] ?? item.theme}
               <span className="ml-1.5 text-[10px] tabular-nums opacity-60">
-                {item.avgScore.toFixed(1)}
+                {(item.avgScore * 100).toFixed(0)}%
               </span>
             </Link>
           );
