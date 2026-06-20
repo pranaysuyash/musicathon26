@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { getSongsByTheme, getThemeYearDistribution, getEventsByRelatedTheme } from "@/lib/db/queries";
+import { getSongsByTheme, getThemeYearDistribution, getEventsByRelatedTheme, getThemeEraDelta } from "@/lib/db/queries";
 import { THEME_LABELS, THEME_COLORS, THEME_DESCRIPTIONS } from "@/lib/nlp/theme-scoring";
 import { Pill } from "@/components/ui/primitives";
 import { StoryNextStep } from "@/components/story/story-next-step";
@@ -41,6 +41,7 @@ export default function ThemePage({ params }: { params: { theme: string } }) {
   const songs = getSongsByTheme(theme, 100);
   const yearDist = getThemeYearDistribution(theme);
   const events = getEventsByRelatedTheme(theme);
+  const eraDelta = getThemeEraDelta(theme);
 
   const totalSongs = songs.length;
   const topYear = yearDist.length > 0
@@ -48,6 +49,56 @@ export default function ThemePage({ params }: { params: { theme: string } }) {
     : null;
   const topThemeSongs = songs.slice(0, 4);
   const topThemeConfidence = topThemeSongs.length > 0 ? topThemeSongs.reduce((sum, s) => sum + s.score, 0) / topThemeSongs.length : 0;
+
+  // Build the "Why this theme recurs" narrative from real era deltas.
+  // Per motto 0.1, the question is "why does this theme come back?"
+  // — the answer is trend + delta, not raw counts.
+  const whyReasons: string[] = [];
+  if (eraDelta) {
+    const recent = eraDelta.recentEra;
+    const ref = eraDelta.referenceEra;
+    const recentLabel = `${recent.start}–${recent.end}`;
+    const refLabel = `${ref.start}–${ref.end}`;
+    if (eraDelta.trend === "rising") {
+      const pct = Math.round((eraDelta.songCountRatio - 1) * 100);
+      whyReasons.push(
+        `${label} is rising: ${recent.songCount} scored songs in ${recentLabel} vs ${ref.songCount} in ${refLabel} (+${pct}%).`
+      );
+    } else if (eraDelta.trend === "falling") {
+      const pct = Math.round((1 - eraDelta.songCountRatio) * 100);
+      whyReasons.push(
+        `${label} is fading: ${recent.songCount} scored songs in ${recentLabel} vs ${ref.songCount} in ${refLabel} (-${pct}%).`
+      );
+    } else if (eraDelta.trend === "novel") {
+      whyReasons.push(
+        `${label} shows up in ${recentLabel} (${recent.songCount} songs) but was absent from the chart lexicon in ${refLabel}.`
+      );
+    } else {
+      whyReasons.push(
+        `${label} holds steady: ${recent.songCount} songs in ${recentLabel} vs ${ref.songCount} in ${refLabel}.`
+      );
+    }
+    if (Math.abs(eraDelta.avgScoreDelta) > 0.02) {
+      const direction = eraDelta.avgScoreDelta > 0 ? "more intense" : "less intense";
+      const deltaPct = Math.abs(Math.round(eraDelta.avgScoreDelta * 100));
+      whyReasons.push(
+        `Average theme score is ${direction} in ${recentLabel} (${deltaPct} percentage points).`
+      );
+    }
+  }
+  // Always include a "peak context" so the narrative is grounded in a
+  // specific year, not just ratios. The peak year is where chart
+  // attention concentrated.
+  if (topYear) {
+    whyReasons.push(
+      `Peak chart attention was in ${topYear.year} with ${topYear.songCount} scored songs (avg score ${(topYear.avgScore * 100).toFixed(0)}/100).`
+    );
+  }
+  // Always include the scoring-honesty line so the user knows this
+  // is score-derived, not lyrics-derived inference.
+  whyReasons.push(
+    `Top theme matches average a ${(topThemeConfidence * 100).toFixed(0)}% score — the strongest the lexicon produces for this theme.`
+  );
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
@@ -80,13 +131,7 @@ export default function ThemePage({ params }: { params: { theme: string } }) {
       <section className="mb-10">
         <BecauseCard
           claim={`Why ${label} is a recurring chart theme`}
-          reasons={[
-            `${totalSongs} songs had this theme as a top signal.`,
-            topYear
-              ? `Peak activity is in ${topYear.year} with ${topYear.songCount} songs.`
-              : "Peak year is not currently available.",
-            `Signal strength is strongest for top theme matches (${(topThemeConfidence * 100).toFixed(0)}% mean top score).`,
-          ]}
+          reasons={whyReasons}
           confidence={Math.min(0.98, Math.max(0.2, topThemeConfidence))}
           provenanceSources={["theme_scores", "hybrid"]}
           evidenceRows={topThemeSongs.map<EvidencePreviewItem>((s) => ({
@@ -102,6 +147,40 @@ export default function ThemePage({ params }: { params: { theme: string } }) {
           inferenceType="theme_overlap"
         />
       </section>
+
+      {eraDelta ? (
+        <section className="mb-10">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-ink-500">
+            Era trend
+          </h2>
+          <div className="mt-3 card p-4">
+            <div className="flex flex-wrap items-center gap-3 text-sm">
+              <span className="text-ink-400">
+                <span className="font-semibold text-ink-100">{eraDelta.referenceEra.start}–{eraDelta.referenceEra.end}</span>
+                {" · "}
+                {eraDelta.referenceEra.songCount} songs
+                {" · avg "}{(eraDelta.referenceEra.avgScore * 100).toFixed(0)}
+              </span>
+              <span className="text-ink-500">→</span>
+              <span className="text-ink-400">
+                <span className="font-semibold text-ink-100">{eraDelta.recentEra.start}–{eraDelta.recentEra.end}</span>
+                {" · "}
+                {eraDelta.recentEra.songCount} songs
+                {" · avg "}{(eraDelta.recentEra.avgScore * 100).toFixed(0)}
+              </span>
+              {eraDelta.trend === "rising" ? (
+                <Pill variant="signal">rising</Pill>
+              ) : eraDelta.trend === "falling" ? (
+                <Pill variant="warn">fading</Pill>
+              ) : eraDelta.trend === "novel" ? (
+                <Pill variant="signal">novel</Pill>
+              ) : (
+                <Pill variant="mute">stable</Pill>
+              )}
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       {yearDist.length > 0 ? (
         <section className="mb-10">

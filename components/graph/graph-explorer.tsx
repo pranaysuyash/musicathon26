@@ -49,7 +49,11 @@ export function GraphExplorer() {
   const rootId = sp.get("rootId") ?? "versesignal:n:year:2020";
   const hops = Number(sp.get("hops") ?? "2");
   const [data, setData] = useState<GraphResponse | null>(null);
-  const [loading, setLoading] = useState(false);
+  // Start in loading state so the user's first paint shows progress,
+  // not the empty state. The useEffect below kicks the fetch; for SSR
+  // we still want to render the loading skeleton immediately rather
+  // than the empty state.
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<GraphEdge | null>(null);
   const [evidence, setEvidence] = useState<Evidence[]>([]);
@@ -74,6 +78,15 @@ export function GraphExplorer() {
     });
   }
 
+  // The graph component is dynamic-imported with ssr:false, so the
+  // SSR HTML shows the Suspense fallback. On the client, the first
+  // render is the empty state (data=null, loading=false), then
+  // useEffect fires (loading=true), then the API returns (data=set).
+  // We want the user's first paint to be informative, not a generic
+  // "Choose a node" message. Track whether we've attempted the
+  // initial fetch yet; if not, show the loading state.
+  const [hasFetched, setHasFetched] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -93,7 +106,10 @@ export function GraphExplorer() {
       } catch (err) {
         if (!cancelled) setError((err as Error).message);
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          setHasFetched(true);
+        }
       }
     }
     if (rootId) load();
@@ -311,7 +327,12 @@ export function GraphExplorer() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr,400px]">
         <div>
           {loading ? (
-            <div className="card flex h-[400px] items-center justify-center text-ink-500 md:h-[640px]">Loading graph…</div>
+            <div className="card flex h-[400px] flex-col items-center justify-center gap-2 text-ink-500 md:h-[640px]">
+              <div className="text-sm">Loading {data?.root?.label ?? "2020"} neighborhood…</div>
+              <div className="text-xs text-ink-600">
+                Anchored at <code className="text-ink-400">{rootId}</code>, {hops} hop{hops === 1 ? "" : "s"}.
+              </div>
+            </div>
           ) : error ? (
             <div className="card flex h-[400px] items-center justify-center text-red-400 md:h-[640px]">{error}</div>
           ) : data ? (
@@ -323,8 +344,33 @@ export function GraphExplorer() {
                 onSelectEdge={(e) => onSelectEdge(e as unknown as GraphEdge)}
               />
             </div>
+          ) : hasFetched ? (
+            <div className="card flex h-[400px] flex-col items-center justify-center gap-3 text-ink-500 md:h-[640px]">
+              <div className="text-sm">No neighborhood found for this anchor.</div>
+              <div className="text-xs text-ink-600">Try one of the quick-jump anchors above.</div>
+            </div>
           ) : (
-            <div className="card flex h-[400px] items-center justify-center text-ink-500 md:h-[640px]">Select a node to start.</div>
+            <div className="card flex h-[400px] flex-col items-center justify-center gap-3 text-ink-500 md:h-[640px]">
+              <div className="text-sm">Choose a node to anchor the graph.</div>
+              <div className="flex flex-wrap items-center justify-center gap-2 text-xs text-ink-400">
+                <span>Try:</span>
+                <button
+                  onClick={() => jumpTo("/graph?rootType=year&rootId=versesignal:n:year:2020&hops=2", "tutorial_2020", "Anchored at 2020.")}
+                  className="pill pill-signal"
+                  type="button"
+                >2020 (default)</button>
+                <button
+                  onClick={() => jumpTo("/graph?rootType=era&rootId=versesignal:n:era:global_streaming_era&hops=2", "tutorial_era", "Anchored at the global streaming era.")}
+                  className="pill pill-mute"
+                  type="button"
+                >2020s era</button>
+                <button
+                  onClick={() => jumpTo("/graph?rootType=event&rootId=versesignal:n:event:versesignal:ev:covid_19&hops=2", "tutorial_covid", "Anchored at COVID-19.")}
+                  className="pill pill-echo"
+                  type="button"
+                >COVID-19</button>
+              </div>
+            </div>
           )}
 
           {edgeTypeCounts.length > 0 ? (

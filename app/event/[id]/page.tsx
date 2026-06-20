@@ -91,6 +91,44 @@ export default function EventPage({ params, searchParams }: PageProps) {
     )
     .slice(0, 4);
 
+  // Per motto 0.1, an event page should answer "is this event
+  // backed by chart evidence, and how did the chart react?" — not
+  // just "how many songs linked?" We compose the narrative from
+  // linked count, decay, and pre-event lead so the card has the
+  // same shape as the theme page.
+  const eventWhyReasons: string[] = [
+    `${linked.length} song${linked.length === 1 ? "" : "s"} cleared the event-link threshold (>= 0.1) with this event.`,
+  ];
+  if (linked.length > 0) {
+    eventWhyReasons.push(
+      `Average edge confidence: ${(linkedConfidence * 100).toFixed(0)}%.`
+    );
+  } else {
+    eventWhyReasons.push(
+      "No song links are currently above the threshold — this event has no chart mention by name."
+    );
+  }
+  eventWhyReasons.push(
+    `Temporal window: ${event.startDate} to ${event.endDate ?? "present"}.`
+  );
+  // Pre-event resonance: the most interesting story
+  if (lead && lead.totalCorrelatedSignals > 0) {
+    const rate = Math.round(lead.leadSignalRate * 100);
+    if (rate >= 30) {
+      eventWhyReasons.push(
+        `Pre-event resonance: ${rate}% of signals correlated with this event were already elevated in ${lead.preEventYear}.`
+      );
+    } else if (lead.preElevatedSignals > 0) {
+      eventWhyReasons.push(
+        `Pre-event shift was mixed: ${lead.preElevatedSignals} signal(s) elevated in ${lead.preEventYear} but moved in the opposite direction during the event.`
+      );
+    } else {
+      eventWhyReasons.push(
+        `No pre-event signal shift detected in ${lead.preEventYear} — the chart reacted synchronously with the event.`
+      );
+    }
+  }
+
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
       <Link href="/" className="text-xs text-ink-400 hover:text-ink-200">← VerseSignal</Link>
@@ -133,13 +171,7 @@ export default function EventPage({ params, searchParams }: PageProps) {
       <section className="mb-10">
         <BecauseCard
           claim={`${event.name} event connections`}
-          reasons={[
-            `${linked.length} songs cleared the event-link threshold (>= 0.1) with this event.`,
-            linked.length > 0
-              ? `Average edge confidence: ${(linkedConfidence * 100).toFixed(0)}%.`
-              : "No song links are currently above the threshold.",
-            `Temporal window: ${event.startDate} to ${event.endDate ?? "present"}.`,
-          ]}
+          reasons={eventWhyReasons}
           confidence={linked.length > 0 ? linkedConfidence : 0.35}
           provenanceSources={linkedSources}
           evidenceRows={linkedEvidenceRows}

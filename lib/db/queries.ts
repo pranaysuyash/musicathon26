@@ -8,6 +8,55 @@
 import { getDb } from "./index";
 import { all, get } from "./sql";
 import type { Song, WorldEvent, GraphNode, GraphEdge, Evidence } from "../types";
+
+// ----------------------------------------------------------------------------
+// Song dedup helper
+// ----------------------------------------------------------------------------
+//
+// Per motto 0.1, the question the user is asking on the artist/theme/year
+// pages is "what songs does this artist/theme/year cover?" — not
+// "how many chart positions did this corpus assign to that song?"
+// The chart corpus is a sample: a global hit shows up at US #1, US
+// #51 (year-end), UK #1, DE #1. The user expects 1 row.
+//
+// `dedupSongCte()` returns a SQL fragment that, when joined to `songs`,
+// gives the canonical id (no `uk-`/`de-` prefix), the best chart rank,
+// and the original title string for the first song matching each
+// real-world (normalized_title, normalized_artist, year) tuple.
+//
+// Title normalization is intentionally crude: lowercase, strip straight
+// + curly apostrophes and double quotes, collapse runs of whitespace.
+// This catches seed-data inconsistencies like "Creepin'" vs "Creepin"
+// without requiring a Unicode-aware normalizer in SQLite.
+function dedupSongCte(): string {
+  return `
+    dedup_songs AS (
+      SELECT
+        lower(trim(replace(replace(replace(replace(s.title, '''', ''), '"', ''), '''', ''), '  ', ' '))) AS norm_title,
+        lower(trim(s.artist)) AS norm_artist,
+        s.year,
+        MIN(CASE WHEN s.id GLOB 'versesignal:[a-z][a-z]-*' THEN NULL ELSE s.id END) AS canonical_id,
+        MIN(s.title) AS repr_title,
+        MIN(s.artist) AS repr_artist,
+        MIN(s.chart_rank) AS best_rank
+      FROM songs s
+      GROUP BY 1, 2, 3
+    )
+  `;
+}
+
+// Helper: build a JOIN to dedup_songs given an alias for the songs
+// table. Use `dedupJoinOn('s')` for the songs table `s` in the same
+// query; `dedupJoinOn('other')` when joining a different alias.
+function dedupJoinOn(alias: string): string {
+  const a = alias;
+  return `JOIN dedup_songs ds
+    ON lower(trim(replace(replace(replace(replace(${a}.title, '''', ''), '"', ''), '''', ''), '  ', ' '))) = ds.norm_title
+   AND lower(trim(${a}.artist)) = ds.norm_artist
+   AND ${a}.year = ds.year
+   AND ${a}.chart_rank = ds.best_rank`;
+}
+
 import { slug as slugify } from "../graph/ids";
 
 /** Human-readable labels for region codes. */
@@ -546,28 +595,47 @@ export function getSongsByTheme(theme: string, limit: number = 50): Array<{
 }> {
   interface Row {
     song_id: string;
-    title: string;
-    artist: string;
+    repr_title: string;
+    repr_artist: string;
     year: number;
-    chart_rank: number;
+    best_rank: number;
     score: number;
   }
+  // Per motto 0.1, the user is asking "which songs express this theme?"
+  // not "how many chart positions of each song scored on this theme?"
+  // The corpus has a song at multiple chart_ranks (US #1, US #51, UK
+  // #1, DE #1), and theme_scores is keyed by song_id so the same song
+  // shows up 4×. We dedup via the dedup_songs CTE.
+  //
+  // The score is per song (not per chart entry), so MAX(score) is safe
+  // — the scorer is deterministic on (theme, song) and produces the
+  // same value regardless of which chart position the song was scored
+  // at.
   const rows = all<Row>(
-    `SELECT ts.song_id, s.title, s.artist, s.year, s.chart_rank, ts.score
-     FROM theme_scores ts
-     JOIN songs s ON s.id = ts.song_id
-     WHERE ts.theme = ?
-     ORDER BY ts.score DESC
-     LIMIT ?`,
+    `WITH ${dedupSongCte()}
+     SELECT
+         ds.canonical_id AS song_id,
+         ds.repr_title,
+         ds.repr_artist,
+         ds.year,
+         ds.best_rank,
+         MAX(ts.score) AS score
+       FROM theme_scores ts
+       JOIN songs s ON s.id = ts.song_id
+       ${dedupJoinOn('s')}
+      WHERE ts.theme = ?
+      GROUP BY ds.canonical_id, ds.repr_title, ds.repr_artist, ds.year, ds.best_rank
+      ORDER BY score DESC
+      LIMIT ?`,
     theme,
     limit
   );
   return rows.map((r) => ({
     songId: r.song_id,
-    title: r.title,
-    artist: r.artist,
+    title: r.repr_title,
+    artist: r.repr_artist,
     year: r.year,
-    chartRank: r.chart_rank,
+    chartRank: r.best_rank,
     score: r.score,
   }));
 }
@@ -578,20 +646,178 @@ export function getThemeYearDistribution(theme: string): Array<{
   songCount: number;
   avgScore: number;
 }> {
+  // Per motto 0.1, the user is asking "how did this theme trend over
+  // time?" — and the answer should be in real-world songs, not
+  // chart positions. We dedup via the dedup_songs CTE so the year
+  // histogram shows one row per (real song, year) match.
   interface Row { year: number; song_count: number; avg_score: number }
   return all<Row>(
-    `SELECT s.year, COUNT(*) AS song_count, AVG(ts.score) AS avg_score
-     FROM theme_scores ts
-     JOIN songs s ON s.id = ts.song_id
-     WHERE ts.theme = ?
-     GROUP BY s.year
-     ORDER BY s.year`,
+    `WITH ${dedupSongCte()}
+     SELECT s.year, COUNT(DISTINCT ds.canonical_id) AS song_count, AVG(ts.score) AS avg_score
+       FROM theme_scores ts
+       JOIN songs s ON s.id = ts.song_id
+       ${dedupJoinOn('s')}
+      WHERE ts.theme = ?
+      GROUP BY s.year
+      ORDER BY s.year`,
     theme
   ).map((r) => ({
     year: r.year,
     songCount: r.song_count,
     avgScore: r.avg_score,
   }));
+}
+
+/**
+ * Per motto 0.1, theme recurrence isn't a count, it's a delta story.
+ * The user is asking "is this theme getting stronger, fading, or
+ * stable over the chart eras we cover?" We answer with two comparisons:
+ *
+ *  1. recentEra vs referenceEra — song count and average score,
+ *     in the modern streaming era vs an earlier chart era.
+ *  2. peakYear context — the year the theme peaked, and what era
+ *     it fell in, so the narrative can mention "Identity peaked in
+ *     2019, the early streaming era."
+ *
+ * Reference eras (per lib/db/queries.ts CHART_ERAS):
+ *  - broadcast_counterculture (1960-1979)
+ *  - mtv_radio_era (1980-1999)
+ *  - digital_transition_era (2000-2011)
+ *  - streaming_transition_era (2012-2019)
+ *  - global_streaming_era (2020-2023)
+ */
+export interface ThemeEraDelta {
+  theme: string;
+  totalSongs: number;
+  totalYears: number;
+  peakYear: number | null;
+  peakYearCount: number;
+  peakYearAvgScore: number | null;
+  // Recent era (2020-2023) vs reference era (2012-2019, the last
+  // comparable high-comparability era). When recent era has 0
+  // songs, we fall back to whatever era the data is densest in.
+  recentEra: { label: string; start: number; end: number; songCount: number; avgScore: number };
+  referenceEra: { label: string; start: number; end: number; songCount: number; avgScore: number };
+  songCountDelta: number; // recent - reference (signed)
+  songCountRatio: number; // recent / reference (1.0 = equal)
+  avgScoreDelta: number; // recent - reference (signed)
+  trend: "rising" | "falling" | "stable" | "novel";
+}
+
+export function getThemeEraDelta(theme: string): ThemeEraDelta | null {
+  // Compute per-year dedup'd song count + avg score, then bucket
+  // by era. We do this in a single pass so the math is consistent
+  // and we don't double-count songs that span an era boundary.
+  interface YearRow { year: number; song_count: number; avg_score: number }
+  const yearRows = all<YearRow>(
+    `WITH ${dedupSongCte()}
+     SELECT s.year,
+            COUNT(DISTINCT ds.canonical_id) AS song_count,
+            AVG(ts.score) AS avg_score
+       FROM theme_scores ts
+       JOIN songs s ON s.id = ts.song_id
+       ${dedupJoinOn('s')}
+      WHERE ts.theme = ?
+      GROUP BY s.year
+      ORDER BY s.year`,
+    theme
+  );
+  if (yearRows.length === 0) {
+    return null;
+  }
+
+  // Per-era aggregation in JS. We use a simple era map by year.
+  const eraOf = (y: number): { id: string; label: string; start: number; end: number } | null => {
+    for (const era of CHART_ERAS) {
+      if (y >= era.start && y <= era.end) {
+        return { id: era.id, label: era.label, start: era.start, end: era.end };
+      }
+    }
+    return null;
+  };
+  const byEra = new Map<string, { label: string; start: number; end: number; songCount: number; weightedScoreSum: number; totalScoreWeight: number }>();
+  let totalSongs = 0;
+  let totalScoreSum = 0;
+  let totalScoreCount = 0;
+  for (const yr of yearRows) {
+    const era = eraOf(yr.year);
+    if (!era) continue;
+    let bucket = byEra.get(era.id);
+    if (!bucket) {
+      bucket = { label: era.label, start: era.start, end: era.end, songCount: 0, weightedScoreSum: 0, totalScoreWeight: 0 };
+      byEra.set(era.id, bucket);
+    }
+    bucket.songCount += yr.song_count;
+    // Yearly avg score weighted by that year's song count.
+    bucket.weightedScoreSum += yr.avg_score * yr.song_count;
+    bucket.totalScoreWeight += yr.song_count;
+    totalSongs += yr.song_count;
+    totalScoreSum += yr.avg_score * yr.song_count;
+    totalScoreCount += yr.song_count;
+  }
+
+  const recent = byEra.get("global_streaming_era");
+  const reference = byEra.get("streaming_transition_era");
+  if (!recent && !reference) {
+    return null;
+  }
+  const fallbackRecent = recent ?? reference!;
+  const fallbackReference = reference ?? recent!;
+  const recentSongCount = recent?.songCount ?? 0;
+  const referenceSongCount = reference?.songCount ?? 0;
+  const recentAvgScore = recent && recent.totalScoreWeight > 0
+    ? recent.weightedScoreSum / recent.totalScoreWeight
+    : 0;
+  const referenceAvgScore = reference && reference.totalScoreWeight > 0
+    ? reference.weightedScoreSum / reference.totalScoreWeight
+    : 0;
+  const songCountDelta = recentSongCount - referenceSongCount;
+  const songCountRatio = referenceSongCount > 0 ? recentSongCount / referenceSongCount : 0;
+  const avgScoreDelta = recentAvgScore - referenceAvgScore;
+  let trend: ThemeEraDelta["trend"];
+  if (referenceSongCount === 0 && recentSongCount > 0) trend = "novel";
+  else if (Math.abs(songCountRatio - 1) < 0.1) trend = "stable";
+  else if (songCountRatio > 1) trend = "rising";
+  else trend = "falling";
+
+  // Peak year
+  let peakYear: number | null = null;
+  let peakYearCount = 0;
+  let peakYearAvgScore: number | null = null;
+  for (const yr of yearRows) {
+    if (yr.song_count > peakYearCount) {
+      peakYearCount = yr.song_count;
+      peakYear = yr.year;
+      peakYearAvgScore = yr.avg_score;
+    }
+  }
+
+  return {
+    theme,
+    totalSongs,
+    totalYears: yearRows.length,
+    peakYear,
+    peakYearCount,
+    peakYearAvgScore,
+    recentEra: {
+      label: fallbackRecent.label,
+      start: fallbackRecent.start,
+      end: fallbackRecent.end,
+      songCount: recentSongCount,
+      avgScore: recentAvgScore,
+    },
+    referenceEra: {
+      label: fallbackReference.label,
+      start: fallbackReference.start,
+      end: fallbackReference.end,
+      songCount: referenceSongCount,
+      avgScore: referenceAvgScore,
+    },
+    songCountDelta,
+    songCountRatio,
+    avgScoreDelta,
+    trend,
+  };
 }
 
 /** Get events whose related themes or keywords overlap with a given theme. */
@@ -839,50 +1065,54 @@ export function getArtistProfile(artistRef: string): ArtistProfile | null {
 }
 
 export function getSimilarSongs(songId: string, limit: number = 8): SimilarSong[] {
-  // Get top similar_to neighbors. We query both src and dst to
-  // catch the undirected relationship. The schema stores both
-  // directions in build-similar-edges.py, so a single query
-  // on src returns one direction; we OR with dst to get both.
+  // Per motto 0.11, dedup so the same real-world song doesn't
+  // appear 3+ times because it charted in 3 regions. The dedup
+  // CTE (defined above) collapses (title, artist, year) to one
+  // canonical id; we join it to `songs other` so the JOIN filter
+  // does the dedup. Group by canonical_id (which is unique) so
+  // we collapse duplicates from the regional chart positions.
   //
-  // Per motto 0.11, dedup on (title, year) so the same song
-  // charting at multiple regional ranks (e.g. Blinding Lights at
-  // US 2020:01 + UK-2020:01 + DE-2020:01) doesn't show up 3+ times
-  // in the "similar songs" list. GROUP BY (title, year) collapses.
+  // We also walk both directions (src and dst) since similar_to
+  // is undirected in the user's mental model.
   const direct = all<SimilarSong>(
     `
+    WITH ${dedupSongCte()}
     SELECT
-        MIN(other.id) AS song_id,
-        other.title,
-        other.artist,
-        other.year,
+        ds.canonical_id AS song_id,
+        ds.repr_title AS title,
+        ds.repr_artist AS artist,
+        ds.year,
         MAX(ge.weight) AS weight
       FROM graph_edges ge
-      JOIN songs other ON other.id = SUBSTR(ge.dst_id, 20)
+      JOIN songs other
+        ON other.id = SUBSTR(ge.dst_id, 20)
+      ${dedupJoinOn('other')}
      WHERE ge.src_id = ?
        AND ge.edge_type = 'similar_to'
-     GROUP BY other.title, other.year
+     GROUP BY ds.canonical_id, ds.repr_title, ds.repr_artist, ds.year
      ORDER BY weight DESC
      LIMIT ?
     `,
     `versesignal:n:song:${songId}`,
     limit
   );
-  // If we got fewer than `limit` results, the song is the SOURCE
-  // for some pairs and we should also look at the BACK direction.
   if (direct.length >= limit) return direct;
   const back = all<SimilarSong>(
     `
+    WITH ${dedupSongCte()}
     SELECT
-        MIN(other.id) AS song_id,
-        other.title,
-        other.artist,
-        other.year,
+        ds.canonical_id AS song_id,
+        ds.repr_title AS title,
+        ds.repr_artist AS artist,
+        ds.year,
         MAX(ge.weight) AS weight
       FROM graph_edges ge
-      JOIN songs other ON other.id = SUBSTR(ge.src_id, 20)
+      JOIN songs other
+        ON other.id = SUBSTR(ge.src_id, 20)
+      ${dedupJoinOn('other')}
      WHERE ge.dst_id = ?
        AND ge.edge_type = 'similar_to'
-     GROUP BY other.title, other.year
+     GROUP BY ds.canonical_id, ds.repr_title, ds.repr_artist, ds.year
      ORDER BY weight DESC
      LIMIT ?
     `,
@@ -1032,37 +1262,39 @@ export interface ArtistEventLink {
 
 export function getArtistSongs(artistName: string, limit: number = 60): ArtistSong[] {
   interface Row {
-    id: string;
-    title: string;
-    artist: string;
+    canonical_id: string;
+    repr_title: string;
+    repr_artist: string;
     year: number;
-    chart_rank: number;
+    best_rank: number;
   }
   const normalized = artistName.trim().toLowerCase();
   const pattern = `%${normalized}%`;
   return all<Row>(
     `
-    -- Per motto 0.11: one row per (title, year) on the artist
-    -- catalog. Same song charted in multiple regions (US, UK,
-    -- DE) appears once per year. Without this dedup, a global hit
-    -- like Blinding Lights shows 4+ times and confuses the user.
-    SELECT s.id, s.title, s.artist, s.year, MIN(s.chart_rank) AS chart_rank
-      FROM songs s
-     WHERE LOWER(s.artist) = LOWER(?)
-        OR LOWER(s.artist) LIKE ?
-     GROUP BY s.title, s.year
-     ORDER BY s.year DESC, MIN(s.chart_rank) ASC
+    -- Per motto 0.1, the user is asking "what songs did this artist
+    -- chart with?" The corpus includes each global hit at multiple
+    -- chart positions (US #1, US #51, UK #1, DE #1). We dedup on
+    -- (normalized_title, normalized_artist, year) so each real-world
+    -- song shows up once, at its best chart rank, with a canonical
+    -- (no regional prefix) song id.
+    WITH ${dedupSongCte()}
+    SELECT ds.canonical_id, ds.repr_title, ds.repr_artist, ds.year, ds.best_rank
+      FROM dedup_songs ds
+     WHERE ds.norm_artist = ?
+        OR ds.norm_artist LIKE ?
+     ORDER BY ds.year DESC, ds.best_rank ASC
      LIMIT ?
     `,
-    artistName,
+    normalized,
     pattern,
     limit
   ).map((r) => ({
-    songId: r.id,
-    title: r.title,
-    artist: r.artist,
+    songId: r.canonical_id,
+    title: r.repr_title,
+    artist: r.repr_artist,
     year: r.year,
-    chartRank: r.chart_rank,
+    chartRank: r.best_rank,
   }));
 }
 
@@ -2241,25 +2473,29 @@ export function getEraOverview(region: string = "US"): EraOverviewRow[] {
   // surfaces the eras as editorial mosaics — each era card shows
   // its song count, top signal, top entity, and event coverage so
   // the user can pick a starting point instead of scrolling.
+  //
+  // The `region` parameter is kept for API compatibility but
+  // effectively ignored in song/entity counts: per motto 0.11, the
+  // user expects a song charted in 4 regions to count as 1 song.
+  // The dedup_songs CTE collapses (title, artist, year) so we
+  // count real-world songs, not chart positions.
   const rows: EraOverviewRow[] = [];
   for (const era of CHART_ERAS) {
-    // Per motto 0.11, count unique chart entries (title+year) so
-    // a song charting in US/UK/DE isn't triple-counted.
     const cnt = (get<{ c: number }>(
-      `SELECT COUNT(*) AS c FROM (
-         SELECT s.title, s.year FROM songs s
-         WHERE s.region = ? AND s.year BETWEEN ? AND ?
-         GROUP BY s.title, s.year
-       )`,
-      region,
+      `WITH ${dedupSongCte()}
+       SELECT COUNT(*) AS c
+         FROM dedup_songs ds
+        WHERE ds.year BETWEEN ? AND ?`,
       era.start,
       era.end,
     )?.c) ?? 0;
     const years = all<{ y: number }>(
-      `SELECT s.year AS y FROM songs s
-         WHERE s.region = ? AND s.year BETWEEN ? AND ?
-         GROUP BY s.year ORDER BY s.year`,
-      region, era.start, era.end,
+      `WITH ${dedupSongCte()}
+       SELECT ds.year AS y
+         FROM dedup_songs ds
+        WHERE ds.year BETWEEN ? AND ?
+        GROUP BY ds.year ORDER BY ds.year`,
+      era.start, era.end,
     );
     // Top mood: pick the mood signal with the highest song_count
     // for the era's year range.
@@ -2282,18 +2518,19 @@ export function getEraOverview(region: string = "US"): EraOverviewRow[] {
       region, era.start, era.end,
     );
     // Top entity: most-mentioned entity in songs whose year falls
-    // in the era window. Per motto 0.11 we dedup on
-    // (entity, title, year) so a single chart hit isn't counted
-    // twice for being in multiple regions.
+    // in the era window. Per motto 0.11 we dedup via the
+    // dedup_songs CTE so a single chart hit isn't counted twice
+    // for being in multiple regions / chart positions.
     const topEntity = get<{ canonical_name: string; c: number }>(
-      `SELECT e.canonical_name, COUNT(DISTINCT s.title || '|' || s.year) AS c
+      `WITH ${dedupSongCte()}
+       SELECT e.canonical_name, COUNT(DISTINCT ds.canonical_id) AS c
          FROM entity_mentions em
-         JOIN songs s ON s.id = em.song_id
+         JOIN dedup_songs ds ON ds.canonical_id = em.song_id
          JOIN entities e ON e.id = em.entity_id
-         WHERE s.region = ? AND s.year BETWEEN ? AND ?
-         GROUP BY e.id
-         ORDER BY c DESC LIMIT 1`,
-      region, era.start, era.end,
+        WHERE ds.year BETWEEN ? AND ?
+        GROUP BY e.id
+        ORDER BY c DESC LIMIT 1`,
+      era.start, era.end,
     );
     // Event count: events whose start_date overlaps the era.
     const eventCount = (get<{ c: number }>(
