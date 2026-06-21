@@ -54,7 +54,20 @@ export default function Home({
       signalType: s.signalType as "theme" | "mood" | "entity",
     }));
 
-  const entryModes = [
+  type EntryModeVisual = "song" | "event" | "world" | "graph" | "timeline";
+  type EntryMode = {
+    eyebrow: string;
+    title: string;
+    description: string;
+    href: string;
+    cta: string;
+    accent: string;
+    chips: string[];
+    icon: typeof Search;
+    visual: EntryModeVisual;
+  };
+
+  const entryModes: EntryMode[] = [
     {
       eyebrow: "Song Lens",
       title: "Start with a song and investigate its evidence trail",
