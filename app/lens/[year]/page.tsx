@@ -305,7 +305,7 @@ export default async function LensPage({
             Candidate contexts to verify
           </h2>
           <p className="mt-1 mb-4 text-sm text-ink-400">
-            {events.length} candidate explanation(s) with a temporal overlap to {year}. These are hypotheses to test, not proof by themselves.
+            {events.length} candidate explanation(s) with a temporal overlap to {year}. These are hypotheses to test, not evidence by themselves.
           </p>
           <ul className="space-y-2">
             {events.map((ev) => {

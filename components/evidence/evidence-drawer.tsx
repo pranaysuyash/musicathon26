@@ -39,7 +39,7 @@ export function EvidenceDrawer({ edge, evidence, onClose }: Props) {
   // Mobile-first: when an edge is selected on a phone, the user
   // expects a bottom-sheet overlay, not a scroll-and-find block
   // below the graph. Per motto 0.1, the question is "what does the
-  // user on a phone need?" — a focused view of the proof, not a
+  // user on a phone need?" — a focused view of the evidence, not a
   // 800px-tall card pushed off-screen.
   //
   // Implementation: on small viewports we render the drawer as a

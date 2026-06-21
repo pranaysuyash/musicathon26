@@ -56,48 +56,64 @@ export default function Home({
 
   const entryModes = [
     {
-      eyebrow: "Feeling first",
-      title: "Search a mood, lyric, or half-remembered phrase",
+      eyebrow: "Song Lens",
+      title: "Start with a song and investigate its evidence trail",
       description:
-        "Start with a feeling and let the corpus return songs, years, and contexts that rhyme with it instead of matching it literally.",
-      href: buildLangPath("/ask", locale, { q: "lonely city nights" }),
+        "Lyrics, themes, mood, entities, candidate events, confidence, and similar songs all stay visible.",
+      href: buildLangPath("/song/versesignal:2020:01:blinding-lights-the-weeknd", locale),
       cta: "Search by feel",
       accent: "from-signal-500/25 via-signal-500/10 to-transparent",
-      chips: ["lonely city nights", "rage after injustice", "party through collapse"],
+      chips: ["lyrics", "themes", "entities"],
       icon: Search,
+      visual: "song",
     },
     {
-      eyebrow: "Year first",
-      title: "Drop into 2020 and read the signal before the explanation",
+      eyebrow: "Event Lens",
+      title: "Test an event against songs before, during, and after",
       description:
-        "Open the clearest anomaly window in the demo corpus and watch the year lens separate direct evidence from cultural echo.",
-      href: buildLangPath("/lens/2020", locale),
-      cta: "Open 2020",
-      accent: "from-echo-500/20 via-echo-500/10 to-transparent",
-      chips: ["signal-led", "lyrics first", "context later"],
-      icon: Compass,
-    },
-    {
-      eyebrow: "Context first",
-      title: "Test COVID, Ukraine, or another candidate explanation",
-      description:
-        "Event pages now behave like a signal trial: direct lyric evidence, pre-event resonance, and the weaker echoes stay separated.",
+        "See direct mentions, weak signals, and the mood shift that surrounds a context like COVID-19.",
       href: buildLangEventPath("versesignal:ev:covid_19", locale),
       cta: "Inspect a trial",
-      accent: "from-strength-high/20 via-signal-500/10 to-transparent",
-      chips: ["direct evidence", "temporal shift", "weak echoes"],
+      accent: "from-echo-500/20 via-echo-500/10 to-transparent",
+      chips: ["confidence", "signal shift", "evidence trail"],
       icon: Sparkles,
+      visual: "event",
     },
     {
-      eyebrow: "Atlas first",
-      title: "Read the cultural weather map",
+      eyebrow: "World Lens",
+      title: "Explore music weather by country and region",
       description:
-        "Use the globe when you want to see where the corpus is hot, thin, or still ambiguous across regions.",
+        "Use the globe to compare signal intensity, uncertainty, and regional context across the world.",
       href: buildLangPath("/globe", locale),
-      cta: "Open the atlas",
+      cta: "Open the globe",
       accent: "from-warn-500/20 via-echo-500/10 to-transparent",
-      chips: ["regional pulse", "uncertainty", "signal weather"],
+      chips: ["regions", "uncertainty", "weather"],
       icon: Globe,
+      visual: "world",
+    },
+    {
+      eyebrow: "Graph Explorer",
+      title: "Walk relationships between songs, events, and evidence",
+      description:
+        "Trace nodes, edges, and evidence without hiding the evidence layer behind the graph.",
+      href: buildLangPath("/graph", locale),
+      cta: "Open the graph",
+      accent: "from-strength-high/20 via-signal-500/10 to-transparent",
+      chips: ["nodes", "edges", "evidence"],
+      icon: Compass,
+      visual: "graph",
+    },
+    {
+      eyebrow: "Timeline",
+      title: "Browse years as a compact visual shelf",
+      description:
+        "The timeline stays secondary: quick, compact, and built to launch you into deeper lenses.",
+      href: buildLangPath("/scrub", locale),
+      cta: "Scrub the timeline",
+      accent: "from-amber-500/20 via-echo-500/10 to-transparent",
+      chips: ["years", "eras", "shifts"],
+      icon: FileSearch,
+      visual: "timeline",
     },
   ];
 
@@ -115,7 +131,7 @@ export default function Home({
     { label: "year", value: "2020", x: 56, y: 14, tone: "echo" },
     { label: "context", value: "COVID-19", x: 76, y: 41, tone: "warn" },
     { label: "region", value: "US", x: 42, y: 68, tone: "signal" },
-    { label: "proof", value: "direct lyric evidence", x: 24, y: 82, tone: "strength" },
+    { label: "evidence", value: "direct lyric evidence", x: 24, y: 82, tone: "strength" },
   ] as const;
 
   return (
@@ -295,8 +311,8 @@ export default function Home({
                   <div className="sm:col-span-2 rounded-[1.5rem] border border-ink-800 bg-ink-950/65 p-4">
                     <p className="text-xs uppercase tracking-[0.24em] text-ink-500">Interpretation rule</p>
                     <p className="mt-3 text-sm leading-6 text-ink-300">
-                      Every surface keeps the evidence visible. The UI should feel lush, but the underlying proof
-                      still has to be auditable.
+                      Every surface keeps the evidence visible. The UI should feel lush, but the underlying
+                      evidence still has to be auditable.
                     </p>
                   </div>
                 </div>
@@ -309,12 +325,13 @@ export default function Home({
       <section className="mt-8">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.26em] text-ink-500">Entry modes</p>
+            <p className="text-xs uppercase tracking-[0.26em] text-ink-500">Exploration surfaces</p>
             <h2 className="h-display mt-2 text-3xl md:text-4xl">
-              Choose the kind of curiosity you want to reward
+              Five ways to enter the music, each with a different lens
             </h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-ink-400">
-              Each doorway starts from a different move: sensation, chronology, verification, or region.
+              Song, event, world, graph, and timeline are all first-class surfaces. The home page should feel like
+              a set of doors, not a spreadsheet.
             </p>
           </div>
           <Link
@@ -337,6 +354,9 @@ export default function Home({
               >
                 <div className={`absolute inset-0 bg-gradient-to-br ${mode.accent}`} />
                 <div className="relative flex h-full flex-col">
+                  <div className="relative mb-4 overflow-hidden rounded-[1.4rem] border border-ink-800 bg-ink-950/55">
+                    <ModeArtwork kind={mode.visual} />
+                  </div>
                   <div className="flex items-center justify-between gap-3">
                     <span className="rounded-full border border-ink-800 bg-ink-950/65 px-2.5 py-1 text-[10px] uppercase tracking-[0.22em] text-ink-400">
                       {String(index + 1).padStart(2, "0")}
@@ -371,7 +391,7 @@ export default function Home({
       <section className="mt-8 rounded-[2rem] border border-ink-800 bg-ink-900/55 p-5 lg:p-6">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.26em] text-ink-500">Era mosaic</p>
+            <p className="text-xs uppercase tracking-[0.26em] text-ink-500">Timeline</p>
             <h2 className="h-display mt-2 text-2xl md:text-3xl">
               {erasWithSongs.length} cultural eras across 64 years, not a wall of year tiles
             </h2>
@@ -614,6 +634,121 @@ function SignalOrbitalMap({
 
       <circle cx="50" cy="50" r="3.4" fill="#e2f5ff" opacity="0.95" />
       <circle cx="50" cy="50" r="10" fill="none" stroke="rgba(255,255,255,0.16)" strokeDasharray="1.5 1.5" />
+    </svg>
+  );
+}
+
+function ModeArtwork({ kind }: { kind: "song" | "event" | "world" | "graph" | "timeline" }) {
+  if (kind === "song") {
+    return (
+      <svg viewBox="0 0 320 180" className="block h-40 w-full">
+        <defs>
+          <linearGradient id="songGlow" x1="0%" x2="100%">
+            <stop offset="0%" stopColor="rgba(14,165,233,0.8)" />
+            <stop offset="100%" stopColor="rgba(34,211,238,0.2)" />
+          </linearGradient>
+        </defs>
+        <rect width="320" height="180" fill="rgba(8,10,16,0.75)" />
+        <circle cx="260" cy="40" r="50" fill="rgba(14,165,233,0.14)" />
+        <circle cx="260" cy="40" r="30" fill="rgba(217,70,239,0.12)" />
+        <path d="M30 118 C56 96, 70 138, 96 116 S140 96, 168 110 S220 136, 290 96" fill="none" stroke="url(#songGlow)" strokeWidth="3.5" strokeLinecap="round" />
+        <path d="M30 136 C56 114, 70 156, 96 134 S140 114, 168 128 S220 154, 290 114" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="1.5" strokeLinecap="round" strokeDasharray="2 4" />
+        <circle cx="90" cy="116" r="8" fill="rgba(56,189,248,0.95)" />
+        <circle cx="156" cy="110" r="8" fill="rgba(196,123,244,0.95)" />
+        <circle cx="240" cy="102" r="8" fill="rgba(52,211,153,0.95)" />
+        <text x="20" y="36" className="fill-ink-300" style={{ fontSize: "11px", letterSpacing: "0.24em" }}>
+          LYRICS
+        </text>
+        <text x="20" y="54" className="fill-ink-100" style={{ fontSize: "24px", fontWeight: 600 }}>
+          feel first
+        </text>
+      </svg>
+    );
+  }
+  if (kind === "event") {
+    return (
+      <svg viewBox="0 0 320 180" className="block h-40 w-full">
+        <rect width="320" height="180" fill="rgba(8,10,16,0.75)" />
+        <rect x="24" y="24" width="272" height="132" rx="18" fill="rgba(12,14,22,0.8)" stroke="rgba(255,255,255,0.08)" />
+        <rect x="48" y="44" width="224" height="16" rx="8" fill="rgba(14,165,233,0.25)" />
+        <rect x="48" y="76" width="184" height="12" rx="6" fill="rgba(217,70,239,0.28)" />
+        <rect x="48" y="98" width="154" height="12" rx="6" fill="rgba(56,189,248,0.18)" />
+        <rect x="48" y="120" width="128" height="12" rx="6" fill="rgba(251,191,36,0.22)" />
+        <circle cx="244" cy="86" r="24" fill="rgba(248,225,108,0.18)" stroke="rgba(248,225,108,0.55)" />
+        <circle cx="244" cy="86" r="9" fill="rgba(248,225,108,0.9)" />
+        <text x="48" y="34" className="fill-ink-300" style={{ fontSize: "11px", letterSpacing: "0.24em" }}>
+          EVENT
+        </text>
+        <text x="48" y="152" className="fill-ink-100" style={{ fontSize: "24px", fontWeight: 600 }}>
+          evidence trail
+        </text>
+      </svg>
+    );
+  }
+  if (kind === "world") {
+    return (
+      <svg viewBox="0 0 320 180" className="block h-40 w-full">
+        <defs>
+          <radialGradient id="worldGlow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="rgba(56,189,248,0.8)" />
+            <stop offset="100%" stopColor="rgba(14,165,233,0)" />
+          </radialGradient>
+        </defs>
+        <rect width="320" height="180" fill="rgba(8,10,16,0.75)" />
+        <circle cx="160" cy="90" r="58" fill="url(#worldGlow)" />
+        <circle cx="160" cy="90" r="58" fill="none" stroke="rgba(255,255,255,0.12)" />
+        <ellipse cx="160" cy="90" rx="56" ry="18" fill="none" stroke="rgba(255,255,255,0.15)" />
+        <ellipse cx="160" cy="90" rx="56" ry="36" fill="none" stroke="rgba(255,255,255,0.08)" />
+        <path d="M102 90h116" stroke="rgba(255,255,255,0.12)" />
+        <path d="M160 32v116" stroke="rgba(255,255,255,0.12)" />
+        <circle cx="122" cy="78" r="7" fill="rgba(56,189,248,0.95)" />
+        <circle cx="194" cy="66" r="7" fill="rgba(196,123,244,0.95)" />
+        <circle cx="210" cy="106" r="7" fill="rgba(52,211,153,0.95)" />
+        <circle cx="138" cy="110" r="7" fill="rgba(251,191,36,0.95)" />
+        <text x="24" y="36" className="fill-ink-300" style={{ fontSize: "11px", letterSpacing: "0.24em" }}>
+          WORLD
+        </text>
+        <text x="24" y="152" className="fill-ink-100" style={{ fontSize: "24px", fontWeight: 600 }}>
+          regional weather
+        </text>
+      </svg>
+    );
+  }
+  if (kind === "graph") {
+    return (
+      <svg viewBox="0 0 320 180" className="block h-40 w-full">
+        <rect width="320" height="180" fill="rgba(8,10,16,0.75)" />
+        <path d="M68 120 L132 72 L212 98 L250 56" stroke="rgba(125,211,252,0.52)" strokeWidth="2.2" fill="none" strokeLinecap="round" />
+        <path d="M68 120 L158 142 L212 98" stroke="rgba(196,123,244,0.42)" strokeWidth="2.2" fill="none" strokeLinecap="round" />
+        <path d="M132 72 L158 142" stroke="rgba(248,225,108,0.28)" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+        <circle cx="68" cy="120" r="12" fill="rgba(56,189,248,0.95)" />
+        <circle cx="132" cy="72" r="12" fill="rgba(196,123,244,0.95)" />
+        <circle cx="212" cy="98" r="12" fill="rgba(52,211,153,0.95)" />
+        <circle cx="158" cy="142" r="12" fill="rgba(251,191,36,0.95)" />
+        <circle cx="250" cy="56" r="12" fill="rgba(248,113,113,0.95)" />
+        <text x="24" y="36" className="fill-ink-300" style={{ fontSize: "11px", letterSpacing: "0.24em" }}>
+          GRAPH
+        </text>
+        <text x="24" y="152" className="fill-ink-100" style={{ fontSize: "24px", fontWeight: 600 }}>
+          evidence network
+        </text>
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 320 180" className="block h-40 w-full">
+      <rect width="320" height="180" fill="rgba(8,10,16,0.75)" />
+      <path d="M28 126H294" stroke="rgba(255,255,255,0.08)" strokeWidth="2" />
+      {Array.from({ length: 8 }).map((_, i) => (
+        <rect key={i} x={36 + i * 32} y={80 + (i % 3) * 12} width="14" height={32 + (i % 4) * 14} rx="5" fill={i % 2 === 0 ? "rgba(56,189,248,0.78)" : "rgba(196,123,244,0.78)"} />
+      ))}
+      <circle cx="260" cy="70" r="26" fill="rgba(248,225,108,0.2)" stroke="rgba(248,225,108,0.55)" />
+      <text x="24" y="36" className="fill-ink-300" style={{ fontSize: "11px", letterSpacing: "0.24em" }}>
+        TIMELINE
+      </text>
+      <text x="24" y="152" className="fill-ink-100" style={{ fontSize: "24px", fontWeight: 600 }}>
+        compact shelf
+      </text>
     </svg>
   );
 }

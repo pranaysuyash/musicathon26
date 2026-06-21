@@ -212,7 +212,7 @@ export default function EventPage({ params, searchParams }: PageProps) {
             { label: "Direct", value: "named in the lyrics" },
             { label: "Shift", value: "moved before the event" },
             { label: "Echo", value: "rhyme without overclaiming" },
-            { label: "Reject", value: "too weak to call proof" },
+            { label: "Reject", value: "too weak to call a connection" },
           ].map((tier) => (
             <div key={tier.label} className="rounded-2xl border border-ink-800 bg-ink-950/55 px-3 py-2">
               <p className="text-[10px] uppercase tracking-[0.24em] text-ink-500">{tier.label}</p>
@@ -230,7 +230,7 @@ export default function EventPage({ params, searchParams }: PageProps) {
           provenanceSources={linkedSources}
           evidenceRows={linkedEvidenceRows}
           evidencePreviewTitle="Representative evidence"
-          caveat="This page surfaces stored edge-level evidence. It is the same evidence used in graph-edge proof, inline here."
+          caveat="This page surfaces stored edge-level evidence. It is the same evidence used in the graph edge trail, inline here."
           inferenceType={linked.length > 0 ? linked[0].edge.inferenceType : "hybrid"}
         />
       </section>

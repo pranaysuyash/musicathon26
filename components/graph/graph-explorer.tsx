@@ -155,7 +155,7 @@ export function GraphExplorer() {
       setEvidence([]);
       return;
     }
-    unlockMilestone("edge_selected", "You opened a graph edge. Time to inspect proof.");
+    unlockMilestone("edge_selected", "You opened a graph edge. Time to inspect the evidence trail.");
     fetch(`/api/edge-evidence?edgeId=${encodeURIComponent(selectedEdge.id)}`)
       .then((r) => r.json())
       .then((j: EvidenceResponse) => {
@@ -181,7 +181,7 @@ export function GraphExplorer() {
 
   function onSelectEdge(edge: GraphEdge) {
     setSelectedEdge(edge);
-    unlockMilestone("edge_selected", "You opened a graph edge. Time to inspect proof.");
+    unlockMilestone("edge_selected", "You opened a graph edge. Time to inspect the evidence trail.");
   }
 
   const nodeCount = data?.nodes.length ?? 0;

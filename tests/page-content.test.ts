@@ -41,17 +41,19 @@ const PAGES: PageCheck[] = [
     path: "/",
     expectInBody: [
       "Search a feeling, lyric, event, or year",
-      "Search by feel",
-      "Signal trial",
+      "Song Lens",
+      "Event Lens",
+      "World Lens",
+      "Graph Explorer",
     ],
   },
   // === ERA MOSAIC: the home page surfaces a small mosaic of eras
   // (5 max), not 64 identical year tiles. Per Decision 0030 the
   // wall of tiles was a catalog anti-pattern.
   {
-    name: "/ shows the era mosaic instead of a wall of year tiles",
+    name: "/ shows the timeline instead of a wall of year tiles",
     path: "/",
-    expectInBody: ["Era mosaic", "cultural eras across", "Top mood"],
+    expectInBody: ["Timeline", "cultural eras across", "Top mood"],
   },
   {
     name: "/ask shows the search-by-feel surface",
