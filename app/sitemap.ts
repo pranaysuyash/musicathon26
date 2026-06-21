@@ -1,11 +1,15 @@
 import type { MetadataRoute } from "next";
+import { initDb } from "@/lib/db";
 import { getAllSongs, getAllEvents, getAllYears } from "@/lib/db/queries";
 import { THEME_LABELS } from "@/lib/nlp/theme-scoring";
+
+export const dynamic = "force-dynamic";
 
 const BASE = process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000";
 const THEMES = Object.keys(THEME_LABELS);
 
 export default function sitemap(): MetadataRoute.Sitemap {
+  initDb();
   const songs = getAllSongs();
   const events = getAllEvents();
   const years = getAllYears("GLOBAL");
