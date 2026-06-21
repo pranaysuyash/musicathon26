@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { getSongById, getSimilarSongs, getArtistMeta, getEvidenceForEdges } from "@/lib/db/queries";
+import { getSongById, getSimilarSongs, getArtistMeta, getEvidenceForEdges, getEventArticlesBatch } from "@/lib/db/queries";
 import { resolveSongId } from "@/lib/song-redirects";
 
 export async function generateMetadata({
@@ -235,6 +235,35 @@ export default async function SongPage({ params }: PageProps) {
     for (const e of edgeEvidence) eventEvidenceSources.add(e.source);
   }
 
+  // Per motto 0.1, the song page should answer "what was the world
+  // doing when this song was #1?" — not just "what themes are in
+  // it." This pulls events whose date range overlaps the song's
+  // year, excluding ones already linked (which have their own
+  // section below) so the user sees a fresh cultural context.
+  const worldContext = all<{
+    id: string;
+    name: string;
+    start_date: string;
+    end_date: string | null;
+    category: string;
+  }>(
+    `SELECT id, name, start_date, end_date, category
+       FROM events
+      WHERE substr(start_date, 1, 4) <= ?
+        AND (end_date IS NULL OR substr(end_date, 1, 4) >= ?)
+        AND id NOT IN (${eventLinks.length > 0
+          ? eventLinks.map(() => "?").join(",")
+          : "''"})
+      ORDER BY start_date ASC`,
+    String(song.year),
+    String(song.year),
+    ...eventLinks.map((e) => e.event_id)
+  );
+  // Background articles for each world-context event. One article
+  // per event is enough on a song page — the user wants the "what
+  // was happening" headline, not a reading list.
+  const articlesByEvent = getEventArticlesBatch(worldContext.map((e) => e.id));
+
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
       <Link href={`/year/${song.year}`} className="text-xs text-ink-400 hover:text-ink-200">← {song.year}</Link>
@@ -247,6 +276,70 @@ export default async function SongPage({ params }: PageProps) {
           {song.artist} · {song.year} · Billboard Hot 100 year-end #{song.chartRank}
         </p>
       </header>
+
+      {worldContext.length > 0 ? (
+        <section
+          aria-label="What was the world doing when this song was charting"
+          className="card mb-10 overflow-hidden border-signal-500/30 bg-gradient-to-br from-signal-500/[0.04] to-echo-500/[0.04] p-5"
+        >
+          <div className="flex items-start gap-3">
+            <div className="mt-1 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-signal-500/20 text-signal-300">
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M2 12h20M12 2a15 15 0 0 1 4 10 15 15 0 0 1-4 10 15 15 0 0 1-4-10 15 15 0 0 1 4-10z" />
+              </svg>
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-signal-300">
+                What was the world doing
+              </p>
+              <p className="mt-2 text-sm leading-relaxed text-ink-200">
+                When <em className="text-ink-100">{song.title}</em> was holding the
+                #1 chart position, the world was also processing:
+              </p>
+              <ul className="mt-3 space-y-2">
+                {worldContext.slice(0, 4).map((ev) => {
+                  const articles = articlesByEvent[ev.id] ?? [];
+                  const topArticle = articles[0];
+                  return (
+                    <li key={ev.id} className="text-sm">
+                      <div className="flex items-baseline gap-2">
+                        <span className="w-1.5 h-1.5 mt-2 shrink-0 rounded-full bg-signal-400" aria-hidden="true" />
+                        <Link
+                          href={`/event/${encodeURIComponent(ev.id)}`}
+                          className="text-ink-100 hover:text-signal-300 transition"
+                        >
+                          {ev.name}
+                        </Link>
+                        <span className="text-xs text-ink-500">· {ev.category}</span>
+                      </div>
+                      {topArticle ? (
+                        <a
+                          href={topArticle.sourceUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="ml-4 mt-1 block rounded border border-ink-800 bg-ink-900/40 px-3 py-2 text-xs transition hover:border-signal-500/40 hover:bg-ink-900/70"
+                        >
+                          <div className="flex items-baseline justify-between gap-2">
+                            <span className="font-medium text-ink-200 truncate">{topArticle.title}</span>
+                            <span className="shrink-0 text-ink-500">· {topArticle.source}</span>
+                          </div>
+                          {topArticle.summary ? (
+                            <p className="mt-1 text-ink-400 line-clamp-2">{topArticle.summary}</p>
+                          ) : null}
+                        </a>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+              <p className="mt-3 text-xs text-ink-500">
+                Background reading from {Object.values(articlesByEvent).reduce((s, a) => s + a.length, 0)} curated article{Object.values(articlesByEvent).reduce((s, a) => s + a.length, 0) === 1 ? "" : "s"}. The connections below are lyric-level matches; the world context here is temporal — what was happening the same year.
+              </p>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">

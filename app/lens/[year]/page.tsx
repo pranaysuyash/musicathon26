@@ -161,6 +161,23 @@ export default async function LensPage({
         <p className="mt-3 text-lg text-ink-300">
           {t(locale, "lens.subtitle")} {year}?
         </p>
+
+        {/* Top-line takeaway — auto-generated from the year's strongest
+            signal vs the prior 3-year baseline. Per the audit, the year
+            page needs visual hierarchy: the user wants the takeaway
+            BEFORE the per-signal breakdown, so they see the headline
+            first. */}
+        {takeaway ? (
+          <div className="mt-6 rounded-2xl border border-signal-500/30 bg-gradient-to-br from-signal-500/[0.06] to-echo-500/[0.04] p-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-signal-300">
+              The takeaway
+            </p>
+            <p className="mt-2 text-lg leading-relaxed text-ink-100 md:text-xl">
+              {takeaway}
+            </p>
+          </div>
+        ) : null}
+
         <div className="mt-6">
           <TimelineScrubber years={allYears} currentYear={year} />
         </div>

@@ -327,14 +327,14 @@ export function GraphExplorer() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr,400px]">
         <div>
           {loading ? (
-            <div className="card flex h-[400px] flex-col items-center justify-center gap-2 text-ink-500 md:h-[640px]">
+            <div className="card flex h-[55vh] min-h-[400px] flex-col items-center justify-center gap-2 text-ink-500 md:h-[640px]">
               <div className="text-sm">Loading {data?.root?.label ?? "2020"} neighborhood…</div>
               <div className="text-xs text-ink-600">
                 Anchored at <code className="text-ink-400">{rootId}</code>, {hops} hop{hops === 1 ? "" : "s"}.
               </div>
             </div>
           ) : error ? (
-            <div className="card flex h-[400px] items-center justify-center text-red-400 md:h-[640px]">{error}</div>
+            <div className="card flex h-[55vh] min-h-[400px] items-center justify-center text-red-400 md:h-[640px]">{error}</div>
           ) : data ? (
             <div className={`transition-all duration-700 ${graphPulse ? "animate-graph-pulse" : ""}`}>
               <GraphView
@@ -345,12 +345,12 @@ export function GraphExplorer() {
               />
             </div>
           ) : hasFetched ? (
-            <div className="card flex h-[400px] flex-col items-center justify-center gap-3 text-ink-500 md:h-[640px]">
+            <div className="card flex h-[55vh] min-h-[400px] flex-col items-center justify-center gap-3 text-ink-500 md:h-[640px]">
               <div className="text-sm">No neighborhood found for this anchor.</div>
               <div className="text-xs text-ink-600">Try one of the quick-jump anchors above.</div>
             </div>
           ) : (
-            <div className="card flex h-[400px] flex-col items-center justify-center gap-3 text-ink-500 md:h-[640px]">
+            <div className="card flex h-[55vh] min-h-[400px] flex-col items-center justify-center gap-3 text-ink-500 md:h-[640px]">
               <div className="text-sm">Choose a node to anchor the graph.</div>
               <div className="flex flex-wrap items-center justify-center gap-2 text-xs text-ink-400">
                 <span>Try:</span>
@@ -385,6 +385,15 @@ export function GraphExplorer() {
           ) : null}
         </div>
         <div className={`space-y-4 ${edgePulse ? "animate-edge-pulse" : ""}`}>
+          {/* Mobile backdrop — invisible on lg+. Tap-outside-to-close */}
+          {selectedEdge ? (
+            <button
+              type="button"
+              aria-label="Close evidence panel"
+              onClick={() => setSelectedEdge(null)}
+              className="fixed inset-0 z-30 bg-ink-950/60 backdrop-blur-sm lg:hidden"
+            />
+          ) : null}
           <EvidenceDrawer
             edge={selectedEdge}
             evidence={evidence}

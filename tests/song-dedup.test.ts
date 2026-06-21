@@ -19,6 +19,7 @@ import {
   getEraOverview,
   getThemeYearDistribution,
   getThemeEraDelta,
+  getRelatedThemes,
 } from "../lib/db/queries";
 
 beforeAll(() => {
@@ -155,5 +156,39 @@ describe("getThemeEraDelta — narrative math", () => {
     // "escape" isn't in the seeded themes list, so this should be null.
     const delta = getThemeEraDelta("__definitely_not_a_real_theme__");
     expect(delta).toBeNull();
+  });
+});
+
+describe("getRelatedThemes — co-occurrence at the song level", () => {
+  it("returns themes that actually co-occur on real songs", () => {
+    const related = getRelatedThemes("loneliness", 6);
+    expect(related.length).toBeGreaterThan(0);
+    // Per the live data, identity co-occurs with loneliness on 93+
+    // songs in the dedup'd corpus. The exact number depends on the
+    // corpus but the order should be stable.
+    const top = related[0];
+    expect(top.coOccurrence).toBeGreaterThan(0);
+    expect(top.coOccurrenceRate).toBeGreaterThan(0);
+    expect(top.coOccurrenceRate).toBeLessThanOrEqual(1);
+  });
+
+  it("related themes are sorted by co-occurrence count desc", () => {
+    const related = getRelatedThemes("love", 6);
+    for (let i = 1; i < related.length; i++) {
+      expect(related[i - 1]!.coOccurrence).toBeGreaterThanOrEqual(related[i]!.coOccurrence);
+    }
+  });
+
+  it("jaccard is in [0, 1] for every result", () => {
+    const related = getRelatedThemes("identity", 6);
+    for (const r of related) {
+      expect(r.jaccard).toBeGreaterThanOrEqual(0);
+      expect(r.jaccard).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("returns empty list for an unknown theme", () => {
+    const related = getRelatedThemes("__no_such_theme__", 6);
+    expect(related).toEqual([]);
   });
 });

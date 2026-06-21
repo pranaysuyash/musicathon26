@@ -1,10 +1,12 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { ArrowRight, Compass, FileSearch, Globe } from "lucide-react";
-import { getAllEvents, getAllYears, getEraOverview } from "@/lib/db/queries";
+import { getAllEvents, getAllYears, getEraOverview, getYearSignals } from "@/lib/db/queries";
 import { initDb } from "@/lib/db";
 import { StoryJourney } from "@/components/story/story-journey";
 import { Pill } from "@/components/ui/primitives";
+import { SignalSeismograph } from "@/components/home/signal-seismograph";
+import { CompareErasWidget } from "@/components/home/compare-eras-widget";
 import { t, resolveLocale, localePairs, type Locale } from "@/lib/i18n/strings";
 
 function buildLangPath(path: string, locale: Locale, query?: Record<string, string>) {
@@ -42,6 +44,24 @@ export default function Home({
   const totalSongs = yearCounts.reduce((a, b) => a + b.songCount, 0);
   const eraOverview = getEraOverview("US");
   const erasWithSongs = eraOverview.filter((e) => e.songCount > 0);
+  // The seismograph on the home page is anchored at 2020 — the year
+  // with the richest signal profile (COVID + BLM + election). Per
+  // motto 0.1, the user should see *real* data on first paint, not
+  // a hard-coded bar. getYearSignals returns per-type top N
+  // (mood/theme/entity), so we re-sort globally by song_count and
+  // pick the top 6 across types — that way a 49-song "identity"
+  // theme rises above a 25-song "romantic" mood, regardless of
+  // signal_type. The seismograph visual colors each line by type.
+  const seismographSignals = getYearSignals(2020, "US", 12)
+    .filter((s) => s.signalType === "theme" || s.signalType === "mood" || s.signalType === "entity")
+    .sort((a, b) => b.songCount - a.songCount)
+    .slice(0, 6)
+    .map((s) => ({
+      signal: s.signal,
+      score: s.score,
+      songCount: s.songCount,
+      signalType: s.signalType as "theme" | "mood" | "entity",
+    }));
 
   const discoveryRoutes = [
     {
@@ -198,36 +218,21 @@ export default function Home({
               </div>
 
               <div className="mt-6 space-y-3">
-                {[
-                  {
-                    label: "songs",
-                    value: "Signals appear in the charts first",
-                    width: "84%",
-                    tone: "bg-gradient-to-r from-signal-500 to-signal-300",
-                  },
-                  {
-                    label: "contexts",
-                    value: "COVID / BLM / Ukraine are candidate explanations, not assumptions",
-                    width: "70%",
-                    tone: "bg-gradient-to-r from-echo-500 to-echo-300",
-                  },
-                  {
-                    label: "proof",
-                    value: "Edges stay inspectable through evidence rows",
-                    width: "92%",
-                    tone: "bg-gradient-to-r from-strength-high to-signal-300",
-                  },
-                ].map((row) => (
-                  <div key={row.label} className="rounded-2xl border border-ink-800/80 bg-ink-900/50 p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-xs uppercase tracking-[0.22em] text-ink-500">{row.label}</span>
-                      <span className="text-xs text-ink-400">{row.value}</span>
-                    </div>
-                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-ink-800">
-                      <div className={`h-full rounded-full ${row.tone}`} style={{ width: row.width }} />
-                    </div>
-                  </div>
-                ))}
+                <SignalSeismograph year={2020} signals={seismographSignals} maxSignals={6} />
+                <div className="flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-[0.22em] text-ink-500">
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-2 w-3 rounded-full bg-signal-500/80" /> theme
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-2 w-3 rounded-full bg-echo-500/80" /> mood
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-2 w-3 rounded-full bg-amber-400/80" /> entity
+                  </span>
+                  <span className="ml-auto normal-case tracking-normal text-ink-500">
+                    Live preview · {seismographSignals.length} of {seismographSignals.length} top signals
+                  </span>
+                </div>
               </div>
 
               <div className="mt-5 rounded-[1.5rem] border border-signal-700/30 bg-signal-950/20 p-4">
@@ -399,6 +404,29 @@ export default function Home({
               </div>
             </Link>
           ))}
+        </div>
+
+        {/* Per the audit: /compare/[from]/[to] is the best page in the
+            app but nobody knows it exists. This widget surfaces two
+            era pickers and a single CTA so the user can pick any two
+            eras and go straight to the comparison. */}
+        <div className="mt-6">
+          <div className="mb-3 flex items-end justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.26em] text-ink-500">Compare any two eras</p>
+              <p className="mt-1 text-sm text-ink-400">
+                Different chart machines, not just different dates. Pick two eras and see what stayed and what changed.
+              </p>
+            </div>
+          </div>
+          <CompareErasWidget
+            eras={eraOverview.map((era) => ({
+              id: era.eraId,
+              start: era.eraStart,
+              end: era.eraEnd,
+              label: era.eraLabel,
+            }))}
+          />
         </div>
       </section>
 

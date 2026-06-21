@@ -67,15 +67,20 @@ def http_get(path: str, params: dict) -> dict:
         "Accept": "application/json",
     })
     last_err: Exception | None = None
+    # Per the Wikidata post-mortem (Decision 0035), MusicBrainz also
+    # returns 429 under burst load. We retry both 429 and 503 with
+    # exponential backoff (3 attempts, max 4s). MusicBrainz's documented
+    # rate limit for unauthenticated is 1 req/sec; the inter-request
+    # sleep below enforces that.
     for attempt in range(3):
         try:
             with urllib.request.urlopen(req, timeout=15) as r:
                 return json.loads(r.read())
         except urllib.error.HTTPError as e:
-            if e.code == 503 and attempt < 2:
+            last_err = e
+            if e.code in (429, 503) and attempt < 2:
                 time.sleep(2 ** attempt)
                 continue
-            last_err = e
             break
         except Exception as e:
             last_err = e

@@ -1,8 +1,8 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { initDb } from "@/lib/db";
-import { getAllYears, REGION_LABELS, getYearSignals } from "@/lib/db/queries";
-import { TimelineScrubber } from "@/components/lens/timeline-scrubber";
+import { REGION_LABELS, getYearTimeline } from "@/lib/db/queries";
+import { YearTimeline } from "@/components/scrub/year-timeline";
 import { Pill } from "@/components/ui/primitives";
 import { t, resolveLocale, localePairs, type Locale } from "@/lib/i18n/strings";
 
@@ -35,14 +35,6 @@ function resolveRegion(region: string | undefined): string {
   return region in REGION_LABELS ? region : "US";
 }
 
-function resolveYear(yearRaw: string | undefined, allYears: { year: number; songCount: number }[]): number {
-  const candidate = Number(yearRaw);
-  if (Number.isFinite(candidate) && allYears.some((y) => y.year === candidate)) {
-    return candidate;
-  }
-  return allYears[allYears.length - 1]?.year ?? new Date().getFullYear();
-}
-
 export default function ScrubPage({
   searchParams,
 }: {
@@ -52,10 +44,16 @@ export default function ScrubPage({
 
   const locale = resolveLocale(searchParams.lang);
   const region = resolveRegion(searchParams.region);
-  const allYears = getAllYears(region);
-  const currentYear = resolveYear(searchParams.year, allYears);
-  const yearSignals = getYearSignals(currentYear, region, 5);
-  const themes = yearSignals.filter((s) => s.signalType === "theme").map((s) => s.signal);
+  const allYears = getYearTimeline(region);
+  // Pick a default year — last available, or 2020 if none
+  const lastYear = allYears[allYears.length - 1]?.year ?? 2020;
+  const currentYear = (() => {
+    const candidate = Number(searchParams.year);
+    if (Number.isFinite(candidate) && allYears.some((y) => y.year === candidate)) {
+      return candidate;
+    }
+    return lastYear;
+  })();
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
@@ -97,62 +95,53 @@ export default function ScrubPage({
 
       <section className="mt-8 rounded-2xl border border-ink-800 p-4">
         <div className="mb-4 flex flex-wrap items-center gap-3 text-xs text-ink-400">
+          {/* Region picker — uses a form submit so it works in
+              server-rendered output. The auto-submit on change would
+              require a client component; form submit keeps the page
+              server-only and avoids 500 errors. */}
           <form action="/scrub" className="flex items-center gap-2">
-            <label>
-              <span className="mr-2">Region</span>
+            <label className="flex items-center gap-2">
+              <span>Region</span>
               <select
                 name="region"
                 defaultValue={region}
                 className="rounded-lg border border-ink-700 bg-ink-900 px-2.5 py-1.5 text-xs text-ink-200"
               >
                 {Object.entries(REGION_LABELS).map(([code, label]) => (
-              <option key={code} value={code}>
-                {label}
-              </option>
+                  <option key={code} value={code}>{label}</option>
                 ))}
               </select>
             </label>
-            <label>
-              <span className="ml-2 mr-2">Year</span>
-              <select
-                name="year"
-                defaultValue={String(currentYear)}
-                className="rounded-lg border border-ink-700 bg-ink-900 px-2.5 py-1.5 text-xs text-ink-200"
-              >
-                {allYears.map((y) => (
-                  <option key={y.year} value={String(y.year)}>
-                    {y.year} ({y.songCount})
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button type="submit" className="rounded-lg bg-signal-500 px-3 py-1.5 text-xs font-medium text-ink-950">
-              Go
+            <button
+              type="submit"
+              className="rounded-lg bg-signal-500 px-3 py-1.5 text-xs font-medium text-ink-950"
+            >
+              Switch region
             </button>
           </form>
-            <Link
-              href={buildLangPath("/scrub?region=US", locale)}
-              className="ml-auto rounded-lg border border-ink-700 px-3 py-1.5 text-xs hover:border-ink-600"
-            >
+          <Link
+            href={buildLangPath("/scrub?region=US", locale)}
+            className="rounded-lg border border-ink-700 px-3 py-1.5 text-xs hover:border-ink-600"
+          >
             Reset
           </Link>
         </div>
 
-        {/* Era quick-jumps: 1960s, 1970s, 1980s, 1990s, 2000s, 2010s, 2020s */}
+        {/* Era quick-jumps */}
         <div className="mb-4 flex flex-wrap items-center gap-2 text-xs">
-          <span className="text-ink-500">Era:</span>
+          <span className="text-ink-500">Jump to era:</span>
           {[
-            { label: "1960s", years: [1960, 1969] },
-            { label: "1970s", years: [1970, 1979] },
-            { label: "1980s (MTV)", years: [1980, 1989] },
-            { label: "1990s", years: [1990, 1999] },
-            { label: "2000s (digital)", years: [2000, 2009] },
-            { label: "2010s (streaming)", years: [2010, 2019] },
-            { label: "2020s (global)", years: [2020, 2023] },
+            { label: "1960s Broadcast", start: 1960, end: 1969 },
+            { label: "1970s Broadcast", start: 1970, end: 1979 },
+            { label: "1980s MTV", start: 1980, end: 1989 },
+            { label: "1990s MTV", start: 1990, end: 1999 },
+            { label: "2000s Digital", start: 2000, end: 2009 },
+            { label: "2010s Streaming", start: 2010, end: 2019 },
+            { label: "2020s Global", start: 2020, end: 2023 },
           ].map((era) => (
             <Link
               key={era.label}
-              href={buildLangPath(`/lens/${era.years[0]}?region=${region}`, locale)}
+              href={buildLangPath(`/lens/${era.start}?region=${region}`, locale)}
               className="rounded-full border border-ink-700 px-2.5 py-0.5 text-ink-200 hover:border-signal-300/70 hover:text-signal-200"
             >
               {era.label}
@@ -161,7 +150,7 @@ export default function ScrubPage({
         </div>
 
         {allYears.length > 0 ? (
-          <TimelineScrubber years={allYears} currentYear={currentYear} />
+          <YearTimeline years={allYears} currentYear={currentYear} region={region} />
         ) : (
           <p className="text-sm text-amber-300">No timeline data for this region yet.</p>
         )}
@@ -169,21 +158,27 @@ export default function ScrubPage({
 
       <section className="mt-8">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-500">
-          Snapshot for {currentYear}
+          What to do next
         </h2>
-        <div className="mt-3 rounded-xl border border-ink-800 p-4">
-          <p className="text-sm text-ink-300">Top themes: {themes.join(", ") || "No signal yet"}</p>
-          <p className="mt-2 text-xs text-ink-500">
-            Songs indexed in this slice: {allYears.find((y) => y.year === currentYear)?.songCount ?? 0}
-          </p>
-          <div className="mt-4">
-            <Link
-              href={buildLangPath(`/lens/${currentYear}?region=${region}`, locale)}
-              className="text-xs text-signal-300 hover:text-signal-200"
-            >
-              Open full lens
-            </Link>
-          </div>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <Link
+            href={buildLangPath(`/lens/${currentYear}?region=${region}`, locale)}
+            className="card p-4 text-sm transition hover:border-signal-500/40"
+          >
+            <p className="font-medium text-ink-100">Open the {currentYear} lens</p>
+            <p className="mt-1 text-xs text-ink-400">
+              Lyrics-first surface: what the chart was saying that year.
+            </p>
+          </Link>
+          <Link
+            href={buildLangPath(`/graph?rootType=year&rootId=versesignal:n:year:${currentYear}&hops=2`, locale)}
+            className="card p-4 text-sm transition hover:border-signal-500/40"
+          >
+            <p className="font-medium text-ink-100">Open {currentYear} in the graph</p>
+            <p className="mt-1 text-xs text-ink-400">
+              Force-directed neighborhood. Verify any claim you saw.
+            </p>
+          </Link>
         </div>
       </section>
     </main>

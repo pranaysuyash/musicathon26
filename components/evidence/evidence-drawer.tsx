@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { X } from "lucide-react";
 import { ConfidenceBar, Pill } from "@/components/ui/primitives";
 import type { GraphEdge, Evidence, EvidenceType } from "@/lib/types";
@@ -35,6 +36,29 @@ const EVIDENCE_GROUPS: Array<{
 ];
 
 export function EvidenceDrawer({ edge, evidence, onClose }: Props) {
+  // Mobile-first: when an edge is selected on a phone, the user
+  // expects a bottom-sheet overlay, not a scroll-and-find block
+  // below the graph. Per motto 0.1, the question is "what does the
+  // user on a phone need?" — a focused view of the proof, not a
+  // 800px-tall card pushed off-screen.
+  //
+  // Implementation: on small viewports we render the drawer as a
+  // fixed bottom-sheet that covers the bottom 60vh and shows the
+  // same content. The X button is always visible. On `lg:` we fall
+  // back to the original aside column layout.
+  useEffect(() => {
+    if (!edge) return;
+    // Lock body scroll on mobile when drawer is open
+    const isDesktop = window.matchMedia("(min-width: 1024px)").matches;
+    if (!isDesktop) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = prev;
+      };
+    }
+  }, [edge]);
+
   if (!edge) return null;
   const grouped = new Map<EvidenceType | "other", Evidence[]>();
   for (const e of evidence) {
@@ -68,7 +92,13 @@ export function EvidenceDrawer({ edge, evidence, onClose }: Props) {
     : "Inference type is not explicitly logged for this connection yet.";
 
   return (
-    <aside className="card flex h-full w-full max-w-md flex-col border-l border-ink-800 bg-ink-950/95 p-5">
+    <aside
+      // Mobile: fixed bottom sheet, 75vh, full width. Desktop: sidebar column.
+      className="card fixed inset-x-0 bottom-0 z-40 flex max-h-[80vh] w-full flex-col border-t border-ink-800 bg-ink-950/95 p-5 shadow-2xl backdrop-blur-sm lg:static lg:inset-auto lg:z-auto lg:max-h-none lg:w-auto lg:max-w-md lg:border-l lg:border-t-0 lg:shadow-none"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Evidence for graph connection"
+    >
       <div className="flex items-start justify-between">
         <div>
           <Pill variant="signal">{edge.edgeType.replace(/_/g, " ")}</Pill>

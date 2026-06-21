@@ -55,25 +55,48 @@ MUSIC_KEYWORDS = ("singer", "rapper", "songwriter", "musician", "band",
                   "group", "composer", "producer", "artist")
 
 
-def mediawiki_search(name: str, *, timeout: int = 15) -> list[dict]:
-    """Look up an entity via the MediaWiki wbsearchentities API."""
+def mediawiki_search(name: str, *, timeout: int = 15, max_retries: int = 4) -> list[dict]:
+    """Look up an entity via the MediaWiki wbsearchentities API.
+
+    Per Decision 0010, the API is rate-limited and 429 responses
+    are common. We retry with exponential backoff (4 attempts,
+    up to 8s) so a transient throttle doesn't lose the lookup.
+    """
     url = (
         f"https://www.wikidata.org/w/api.php?action=wbsearchentities"
         f"&search={urllib.parse.quote(name)}&language=en&format=json&limit=5"
     )
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        data = json.loads(r.read())
-    return data.get("search", [])
+    last_err: Exception | None = None
+    for attempt in range(max_retries):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                data = json.loads(r.read())
+            return data.get("search", [])
+        except urllib.error.HTTPError as e:
+            last_err = e
+            if e.code == 429:
+                # 429 is rate-limited: exponential backoff
+                backoff = 0.5 * (2 ** attempt)  # 0.5, 1, 2, 4
+                time.sleep(backoff)
+                continue
+            # Non-retryable HTTP error
+            print(f"    [warn] HTTP {e.code} for {name!r}: {e.reason}", file=sys.stderr)
+            return []
+        except Exception as e:
+            last_err = e
+            print(f"    [warn] {type(e).__name__} for {name!r}: {e}", file=sys.stderr)
+            return []
+    # All retries exhausted
+    if last_err is not None:
+        print(f"    [warn] HTTP 429 after {max_retries} retries for {name!r}", file=sys.stderr)
+    return []
 
 
 def lookup_qid(name: str) -> str | None:
     """Return the best-matching Wikidata QID for `name`, or None."""
     try:
         results = mediawiki_search(name)
-    except urllib.error.HTTPError as e:
-        print(f"    [warn] HTTP {e.code} for {name!r}: {e.reason}", file=sys.stderr)
-        return None
     except Exception as e:
         print(f"    [warn] {type(e).__name__} for {name!r}: {e}", file=sys.stderr)
         return None

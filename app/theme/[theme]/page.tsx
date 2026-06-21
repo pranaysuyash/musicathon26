@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { getSongsByTheme, getThemeYearDistribution, getEventsByRelatedTheme, getThemeEraDelta } from "@/lib/db/queries";
+import { getSongsByTheme, getThemeYearDistribution, getEventsByRelatedTheme, getThemeEraDelta, getRelatedThemes } from "@/lib/db/queries";
 import { THEME_LABELS, THEME_COLORS, THEME_DESCRIPTIONS } from "@/lib/nlp/theme-scoring";
 import { Pill } from "@/components/ui/primitives";
 import { StoryNextStep } from "@/components/story/story-next-step";
@@ -42,6 +42,7 @@ export default function ThemePage({ params }: { params: { theme: string } }) {
   const yearDist = getThemeYearDistribution(theme);
   const events = getEventsByRelatedTheme(theme);
   const eraDelta = getThemeEraDelta(theme);
+  const relatedThemes = getRelatedThemes(theme, 6);
 
   const totalSongs = songs.length;
   const topYear = yearDist.length > 0
@@ -178,6 +179,42 @@ export default function ThemePage({ params }: { params: { theme: string } }) {
                 <Pill variant="mute">stable</Pill>
               )}
             </div>
+          </div>
+        </section>
+      ) : null}
+
+      {relatedThemes.length > 0 ? (
+        <section className="mb-10">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-ink-500">
+            Themes that travel with {label}
+          </h2>
+          <p className="mt-1 text-xs text-ink-500">
+            Co-occurrence at the song level: how often the other theme shows up in songs that also score on {label.toLowerCase()}.
+          </p>
+          <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
+            {relatedThemes.map((rt) => (
+              <Link
+                key={rt.theme}
+                href={`/theme/${rt.theme}`}
+                className="card flex items-center gap-3 p-3 text-sm hover:border-signal-500/40 hover:bg-ink-900/70 transition"
+              >
+                <span className="min-w-0 flex-1 truncate font-medium text-ink-100">
+                  {THEME_LABELS[rt.theme as keyof typeof THEME_LABELS] ?? rt.theme.replace(/_/g, " ")}
+                </span>
+                <span className="text-xs text-ink-500 tabular-nums whitespace-nowrap">
+                  {Math.round(rt.coOccurrenceRate * 100)}% co-occur
+                </span>
+                <span
+                  className="h-1.5 w-12 shrink-0 overflow-hidden rounded-full bg-ink-800"
+                  aria-hidden="true"
+                >
+                  <span
+                    className="block h-full rounded-full bg-signal-500/80"
+                    style={{ width: `${Math.min(100, rt.coOccurrenceRate * 100)}%` }}
+                  />
+                </span>
+              </Link>
+            ))}
           </div>
         </section>
       ) : null}

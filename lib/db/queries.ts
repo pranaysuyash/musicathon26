@@ -430,6 +430,39 @@ export function getEventArticles(eventId: string): EventArticle[] {
   }));
 }
 
+/**
+ * Batch-fetch articles for a list of event IDs. Per motto 0.7, the
+ * song page queries the world-context events in one shot rather than
+ * N queries. Returns a map: eventId -> articles (empty array if none).
+ */
+export function getEventArticlesBatch(eventIds: string[]): Record<string, EventArticle[]> {
+  if (eventIds.length === 0) return {};
+  const placeholders = eventIds.map(() => "?").join(",");
+  const rows = all<EventArticleRow & { rn: number }>(
+    `SELECT id, event_id, source, source_url, title, published_at, summary,
+            ROW_NUMBER() OVER (PARTITION BY event_id ORDER BY COALESCE(published_at, '') DESC) AS rn
+       FROM event_articles
+      WHERE event_id IN (${placeholders})`,
+    ...eventIds
+  );
+  const out: Record<string, EventArticle[]> = {};
+  for (const id of eventIds) out[id] = [];
+  for (const r of rows) {
+    if (r.rn > 1) continue; // top article per event only — keep the surface clean
+    out[r.event_id] = out[r.event_id] || [];
+    out[r.event_id]!.push({
+      id: r.id,
+      eventId: r.event_id,
+      source: r.source,
+      sourceUrl: r.source_url,
+      title: r.title,
+      publishedAt: r.published_at,
+      summary: r.summary,
+    });
+  }
+  return out;
+}
+
 export function getGraphNode(id: string): GraphNode | null {
   const r = get<GraphNodeRow>(`SELECT * FROM graph_nodes WHERE id = ?`, id);
   return r ? rowToNode(r) : null;
@@ -818,6 +851,86 @@ export function getThemeEraDelta(theme: string): ThemeEraDelta | null {
     avgScoreDelta,
     trend,
   };
+}
+
+/**
+ * Per motto 0.1, theme pages should answer "what other themes does
+ * this one travel with?" — a user landing on /theme/loneliness
+ * should see that loneliness and heartbreak co-occur in 67% of
+ * songs, and that identity is a strong secondary signal in the
+ * same era. We compute co-occurrence at the song level (dedup'd
+ * per the dedup_songs CTE) so the related-themes list reflects
+ * real-world songs, not chart positions.
+ */
+export interface RelatedTheme {
+  theme: string;
+  /** Number of canonical songs that score on BOTH this theme and the input. */
+  coOccurrence: number;
+  /** Jaccard similarity: coOccurrence / (songs_in_this_theme + songs_in_other - coOccurrence). */
+  jaccard: number;
+  /** Co-occurrence as a percentage of songs in the input theme (0-1). */
+  coOccurrenceRate: number;
+}
+
+export function getRelatedThemes(theme: string, limit: number = 6): RelatedTheme[] {
+  interface Row {
+    other_theme: string;
+    cooccurrence: number;
+    songs_in_input: number;
+    songs_in_other: number;
+  }
+  // Per motto 0.1, the user is asking "what does this theme travel
+  // with?" — not "what themes share a word?" The query below finds
+  // themes that score on the same canonical songs, dedup'd via
+  // the dedup_songs CTE so the count is real songs, not chart
+  // positions. Co-occurrence count is the number of real songs
+  // that score on both themes; jaccard is the set-similarity ratio.
+  return all<Row>(
+    `WITH ${dedupSongCte()},
+     input_theme_songs AS (
+       SELECT DISTINCT ds.canonical_id AS song_id
+         FROM theme_scores ts
+         JOIN songs s ON s.id = ts.song_id
+         ${dedupJoinOn('s')}
+        WHERE ts.theme = ?
+     ),
+     input_song_count AS (
+       SELECT COUNT(*) AS c FROM input_theme_songs
+     ),
+     other_theme AS (
+       SELECT ts.theme AS other_theme, COUNT(DISTINCT ds.canonical_id) AS songs_in_other
+         FROM theme_scores ts
+         JOIN songs s ON s.id = ts.song_id
+         ${dedupJoinOn('s')}
+        WHERE ts.theme != ?
+        GROUP BY ts.theme
+     ),
+     cooccurrences AS (
+       SELECT ts2.theme AS other_theme, COUNT(DISTINCT its.song_id) AS cooccurrence
+         FROM theme_scores ts2
+         JOIN input_theme_songs its ON its.song_id = ts2.song_id
+        WHERE ts2.theme != ?
+        GROUP BY ts2.theme
+     )
+     SELECT
+       ot.other_theme,
+       cc.cooccurrence,
+       (SELECT c FROM input_song_count) AS songs_in_input,
+       ot.songs_in_other
+     FROM cooccurrences cc
+     JOIN other_theme ot ON ot.other_theme = cc.other_theme
+     ORDER BY cc.cooccurrence DESC
+     LIMIT ?`,
+    theme, theme, theme, limit
+  ).map((r) => ({
+    theme: r.other_theme,
+    coOccurrence: r.cooccurrence,
+    jaccard:
+      r.songs_in_input + r.songs_in_other - r.cooccurrence > 0
+        ? r.cooccurrence / (r.songs_in_input + r.songs_in_other - r.cooccurrence)
+        : 0,
+    coOccurrenceRate: r.songs_in_input > 0 ? r.cooccurrence / r.songs_in_input : 0,
+  }));
 }
 
 /** Get events whose related themes or keywords overlap with a given theme. */
@@ -1463,6 +1576,77 @@ export function getYearSignalTop(
 ): ReturnType<typeof getYearSignals> {
   // getYearSignals returns the top 3*limit signals sorted by score
   return getYearSignals(year, region, limit * 3).slice(0, limit);
+}
+
+/**
+ * Per-year top signal for the timeline scrubber.
+ *
+ * Returns the song_count + top theme + top mood for each year in a
+ * single query. Used by `/scrub` to show 64 year-pills with era
+ * backgrounds, without N round-trips.
+ *
+ * Schema: song_count = total songs that charted that year (from
+ * the songs table). top_theme / top_mood = the highest-song-count
+ * theme/mood signal for that year (so "energetic" wins over a
+ * higher-scored niche mood that only charted on 2 songs).
+ */
+export interface YearTimelineRow {
+  year: number;
+  songCount: number;
+  topTheme: string | null;
+  topThemeCount: number;
+  topMood: string | null;
+  topMoodCount: number;
+}
+
+export function getYearTimeline(region: string = "US"): YearTimelineRow[] {
+  // Songs per year (the basic "Year 2020 has N songs" count).
+  const songRows = all<{ year: number; c: number }>(
+    `SELECT year, COUNT(*) AS c FROM songs
+      WHERE region = ? OR region IS NULL
+      GROUP BY year`,
+    region
+  );
+  const byYear = new Map<number, YearTimelineRow>();
+  for (const r of songRows) {
+    byYear.set(r.year, {
+      year: r.year,
+      songCount: r.c,
+      topTheme: null,
+      topThemeCount: 0,
+      topMood: null,
+      topMoodCount: 0,
+    });
+  }
+  // Per-year top theme + mood: rank signals by song_count DESC,
+  // pick the first theme/mood per year. Uses a window function so we
+  // do this in a single query.
+  interface SignalRow { year: number; signal_type: string; signal: string; song_count: number }
+  const sigRows = all<SignalRow>(
+    `WITH ranked AS (
+       SELECT year, signal_type, signal, song_count,
+              ROW_NUMBER() OVER (PARTITION BY year, signal_type
+                                 ORDER BY song_count DESC, signal ASC) AS rn
+         FROM year_signal_profiles
+        WHERE region = ? AND signal_type IN ('theme', 'mood')
+     )
+     SELECT year, signal_type, signal, song_count
+       FROM ranked
+      WHERE rn = 1`,
+    region
+  );
+  for (const r of sigRows) {
+    const row = byYear.get(r.year);
+    if (!row) continue;
+    if (r.signal_type === "theme") {
+      row.topTheme = r.signal;
+      row.topThemeCount = r.song_count;
+    } else if (r.signal_type === "mood") {
+      row.topMood = r.signal;
+      row.topMoodCount = r.song_count;
+    }
+  }
+  return [...byYear.values()].sort((a, b) => a.year - b.year);
 }
 
 /** Get all events whose date range overlaps with a given year.

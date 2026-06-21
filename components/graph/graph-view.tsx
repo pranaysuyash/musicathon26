@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 
 const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), { ssr: false });
@@ -60,6 +60,31 @@ const EDGE_COLORS: Record<string, string> = {
 };
 
 export function GraphView({ nodes, edges, onSelectEdge, onSelectNode, rootId, height = 600 }: Props) {
+  // Per motto 0.1, the question on a phone is "is the graph
+  // actually visible?" — a 600px hard-coded canvas on a 667px-tall
+  // iPhone SE viewport leaves almost no chrome. We measure the
+  // viewport and use 55vh on mobile (capped at 640 on desktop) so
+  // the user sees a real graph, not a postage stamp.
+  const [responsiveHeight, setResponsiveHeight] = useState<number>(height);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const compute = () => {
+      const isDesktop = window.matchMedia("(min-width: 768px)").matches;
+      if (isDesktop) {
+        setResponsiveHeight(height);
+      } else {
+        // 55vh of the window height, min 320 so the graph is usable
+        // on small phones. The wrapping card's h-[55vh] style will
+        // also enforce this on the parent side.
+        const vh = window.innerHeight * 0.55;
+        setResponsiveHeight(Math.max(320, vh));
+      }
+    };
+    compute();
+    window.addEventListener("resize", compute);
+    return () => window.removeEventListener("resize", compute);
+  }, [height]);
+
   const data = useMemo(() => {
     const enrichedNodes = nodes.map((n) => ({
       id: n.id,
@@ -82,7 +107,7 @@ export function GraphView({ nodes, edges, onSelectEdge, onSelectNode, rootId, he
   }, [nodes, edges, rootId]);
 
   return (
-    <div className="card overflow-hidden" style={{ height }}>
+    <div className="card overflow-hidden" style={{ height: responsiveHeight }}>
       <ForceGraph2D
         graphData={data}
         backgroundColor="#0c0c10"
