@@ -1,10 +1,8 @@
-import { Suspense } from "react";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { ArrowRight, Compass, Search, Sparkles } from "lucide-react";
 import { PathPanel } from "@/components/graph/path-panel";
 import { SemanticSearchPanel } from "@/components/graph/semantic-search-panel";
-import { searchSongsByFeel, type SemanticSearchResponse } from "@/lib/search/semantic-search";
 import { t, resolveLocale, localePairs, type Locale } from "@/lib/i18n/strings";
 
 function buildSearchParam(url: string, lang: Locale, q?: string) {
@@ -131,13 +129,7 @@ export default async function AskPage({
       </section>
 
       <section className="mt-8 grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
-        {initialAsk ? (
-          <Suspense fallback={<SemanticSearchPanel initialQuery={initialAsk} />}>
-            <SemanticSearchResults query={initialAsk} />
-          </Suspense>
-        ) : (
-          <SemanticSearchPanel />
-        )}
+        <SemanticSearchPanel initialQuery={initialAsk} />
 
         <div className="space-y-6">
           <div className="rounded-[2rem] border border-ink-800 bg-ink-900/55 p-5 lg:p-6">
@@ -165,10 +157,4 @@ export default async function AskPage({
       </section>
     </main>
   );
-}
-
-async function SemanticSearchResults({ query }: { query: string }) {
-  const result = await searchSongsByFeel({ q: query, top: 8, region: "US" });
-  const initialData = "error" in result ? null : result;
-  return <SemanticSearchPanel initialQuery={query} initialData={initialData} />;
 }

@@ -1,0 +1,16 @@
+node_modules
+.next
+.playwright-mcp
+.venv
+.venv.*
+venv
+env
+.agent
+.git
+.cursor
+.vercel
+*.log
+data/logs
+dist
+build
+out

@@ -70,3 +70,4 @@ yarn-error.log*
 
 # Agent-start compatibility mirror (regenerated each session; canonical is docs/context/agent-start/)
 .agent/
+.vercel
