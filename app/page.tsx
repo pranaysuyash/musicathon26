@@ -61,7 +61,7 @@ export default function Home({
       description:
         "Lyrics, themes, mood, entities, candidate events, confidence, and similar songs all stay visible.",
       href: buildLangPath("/song/versesignal:2020:01:blinding-lights-the-weeknd", locale),
-      cta: "Search by feel",
+      cta: "Open the song",
       accent: "from-signal-500/25 via-signal-500/10 to-transparent",
       chips: ["lyrics", "themes", "entities"],
       icon: Search,
