@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import type { ComponentType, ReactNode } from "react";
+import { Component } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Globe, MapPinned, ShieldAlert, Sparkles } from "lucide-react";
@@ -49,6 +50,21 @@ const REGION_HUES: Record<string, string> = {
   medium: "#c084fc",
   sparse: "#94a3b8",
 };
+
+class GlobeErrorBoundary extends Component<
+  { fallback: ReactNode; children: ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  override render() {
+    return this.state.hasError ? this.props.fallback : this.props.children;
+  }
+}
 
 export function CulturalWeatherGlobe({
   locale,
@@ -149,134 +165,14 @@ export function CulturalWeatherGlobe({
 
       <div className="relative grid gap-0 xl:grid-cols-[1.3fr_0.7fr]">
         <div className="relative min-h-[520px] border-b border-ink-800 xl:border-b-0 xl:border-r">
-          {webglReady === false ? (
-            <div className="flex h-full min-h-[520px] flex-col justify-between p-6 lg:p-8">
-              <div className="max-w-xl">
-                <p className="text-xs uppercase tracking-[0.28em] text-ink-500">Fallback weather atlas</p>
-                <h3 className="mt-3 text-2xl font-semibold text-ink-100">The same signals, rendered as a 2D field.</h3>
-                <p className="mt-3 text-sm leading-7 text-ink-300">
-                  WebGL is unavailable on this device, so the surface degrades into a high-contrast atlas.
-                  The product stays playable: signal intensity, data completeness, and candidate context are still visible.
-                </p>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                {fallbackPoints.map((point) => (
-                  <button
-                    key={point.code}
-                    type="button"
-                    onClick={() => syncRegion(point.code)}
-                    className={`rounded-2xl border px-4 py-3 text-left transition ${
-                      point.code === selectedCode
-                        ? "border-signal-400/60 bg-signal-950/35"
-                        : "border-ink-800 bg-ink-950/45 hover:border-signal-400/40"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium text-ink-100">{point.label}</span>
-                      <span className="text-[11px] uppercase tracking-[0.22em] text-ink-500">{point.code}</span>
-                    </div>
-                    <p className="mt-2 text-xs text-ink-400">
-                      {point.songCount} songs · {point.topSignal ?? "signal sparse"} · {Math.round(point.completeness * 100)}% data completeness
-                    </p>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="relative h-full min-h-[520px]">
-              <div className="pointer-events-none absolute left-6 top-6 z-10 max-w-sm rounded-2xl border border-ink-700/80 bg-ink-950/80 px-4 py-3 shadow-lg backdrop-blur">
-                <p className="text-[11px] uppercase tracking-[0.28em] text-ink-500">Cultural weather</p>
-                <p className="mt-1 text-sm text-ink-200">
-                  Song-led signals first, candidate context second, verification last.
-                </p>
-              </div>
-
-              <div className="pointer-events-none absolute right-6 top-6 z-10 flex flex-col gap-2 text-[11px] uppercase tracking-[0.22em] text-ink-500">
-                <span className="rounded-full border border-ink-800 bg-ink-950/80 px-3 py-1">Year {year}</span>
-                <span className="rounded-full border border-ink-800 bg-ink-950/80 px-3 py-1">
-                  {layer === "signals" && "Signal field"}
-                  {layer === "context" && "Candidate context"}
-                  {layer === "uncertainty" && "Uncertainty view"}
-                  {layer === "story" && "Story mode"}
-                </span>
-              </div>
-
-              <div className="absolute inset-x-6 bottom-6 z-10 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-ink-700/80 bg-ink-950/80 px-4 py-3 backdrop-blur">
-                <div className="flex items-center gap-2 text-xs text-ink-400">
-                  <Sparkles className="h-4 w-4 text-signal-300" />
-                  <span>{selectedPoint?.topSignal ?? "Top signal not resolved yet"}</span>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {(["signals", "context", "uncertainty", "story"] as const).map((item) => (
-                    <button
-                      key={item}
-                      type="button"
-                      onClick={() => setLayer(item)}
-                      className={`rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.22em] transition ${
-                        layer === item
-                          ? "border-signal-400/60 bg-signal-950/35 text-signal-100"
-                          : "border-ink-700 bg-ink-900/60 text-ink-400 hover:border-signal-400/40 hover:text-ink-200"
-                      }`}
-                    >
-                      {item}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <GlobeView
-                className="h-full min-h-[520px] w-full"
-                backgroundColor="rgba(2, 6, 23, 0)"
-                globeMaterial={globeMaterial}
-                showAtmosphere
-                atmosphereColor="#38bdf8"
-                atmosphereAltitude={0.15}
-                showGraticules
-                graticuleColor={() => "rgba(148, 163, 184, 0.14)"}
-                pointsData={points}
-                pointLat="lat"
-                pointLng="lng"
-                pointLabel={(point: WeatherRegionPoint) =>
-                  `${point.label} · ${point.songCount} songs · ${point.topSignal ?? "signal sparse"}`
-                }
-                pointColor={(point: WeatherRegionPoint) =>
-                  point.code === selectedCode
-                    ? REGION_HUES.highlight
-                    : point.completeness < 0.45
-                      ? REGION_HUES.sparse
-                      : point.intensity > 0.65
-                        ? REGION_HUES.strong
-                        : REGION_HUES.medium
-                }
-                pointAltitude={(point: WeatherRegionPoint) =>
-                  0.03 + point.intensity * 0.16 + (point.code === selectedCode ? 0.08 : 0)
-                }
-                pointRadius={(point: WeatherRegionPoint) => 0.26 + point.intensity * 0.18 + (point.code === selectedCode ? 0.08 : 0)}
-                pointsMerge={false}
-                pointsTransitionDuration={900}
-                ringsData={ringsData}
-                ringLat="lat"
-                ringLng="lng"
-                ringAltitude={0.02}
-                ringColor={(ring: WeatherRegionPoint & { ringColor: [string, string] }) => ring.ringColor}
-                ringMaxRadius={(ring: WeatherRegionPoint & { radius: number }) => ring.radius}
-                ringPropagationSpeed={(ring: WeatherRegionPoint) => (ring.code === selectedCode ? 1.1 : 1.6)}
-                ringRepeatPeriod={(ring: WeatherRegionPoint) => (ring.code === selectedCode ? 900 : 1200)}
-                labelsData={layer === "signals" || layer === "story" ? visibleLabels : visibleLabels.slice(0, 3)}
-                labelLat="lat"
-                labelLng="lng"
-                labelText="text"
-                labelColor={() => "#e2e8f0"}
-                labelSize={0.45}
-                labelDotRadius={0.08}
-                labelIncludeDot
-                labelAltitude={0.012}
-                onPointClick={(point: WeatherRegionPoint) => syncRegion(point.code)}
-                onLabelClick={(label: WeatherRegionPoint & { text: string }) => syncRegion(label.code)}
-              />
-            </div>
-          )}
+          <AtlasFallbackSurface
+            fallbackPoints={fallbackPoints}
+            selectedCode={selectedCode}
+            selectedPoint={selectedPoint}
+            reason="WebGL globe is disabled in this browser build"
+            year={year}
+            syncRegion={syncRegion}
+          />
         </div>
 
         <aside className="flex flex-col gap-5 p-6 lg:p-8">
@@ -292,17 +188,17 @@ export function CulturalWeatherGlobe({
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
             <InfoCard
               icon={<Globe className="h-4 w-4 text-signal-300" />}
-              title="Tier 1 prototype"
-              body="Use react-globe.gl first. It gives the fastest path to a rich, explorable globe with rings, labels, and arcs."
+              title="WebGL globe"
+              body="Use the live globe first. It gives the fastest path to a rich, explorable surface with rings, labels, and region pulses."
             />
             <InfoCard
               icon={<MapPinned className="h-4 w-4 text-echo-300" />}
-              title="Tier 2 fallback"
+              title="Fallback atlas"
               body="If WebGL is unavailable, degrade to a high-contrast 2D atlas with the same region stories and selection flow."
             />
             <InfoCard
               icon={<ShieldAlert className="h-4 w-4 text-amber-300" />}
-              title="Tier 3 overkill"
+              title="Honesty guardrail"
               body="Treat a full geospatial engine as the last resort. VerseSignal needs cultural exploration, not terrain infrastructure."
             />
           </div>
@@ -348,6 +244,72 @@ export function CulturalWeatherGlobe({
         </aside>
       </div>
     </section>
+  );
+}
+
+function AtlasFallbackSurface({
+  fallbackPoints,
+  selectedCode,
+  selectedPoint,
+  reason,
+  year,
+  syncRegion,
+}: {
+  fallbackPoints: WeatherRegionPoint[];
+  selectedCode: string;
+  selectedPoint: WeatherRegionPoint | null;
+  reason: string;
+  year: number;
+  syncRegion: (code: string) => void;
+}) {
+  return (
+    <div className="flex h-full min-h-[520px] flex-col justify-between p-6 lg:p-8">
+      <div className="max-w-xl">
+        <p className="text-xs uppercase tracking-[0.28em] text-ink-500">Fallback weather atlas</p>
+        <h3 className="mt-3 text-2xl font-semibold text-ink-100">
+          The same signal story, rendered as a 2D field.
+        </h3>
+        <p className="mt-3 text-sm leading-7 text-ink-300">
+          {reason}. The product stays playable: signal intensity, data completeness, and candidate context are
+          still visible.
+        </p>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        {fallbackPoints.map((point) => (
+          <button
+            key={point.code}
+            type="button"
+            onClick={() => syncRegion(point.code)}
+            className={`rounded-2xl border px-4 py-3 text-left transition ${
+              point.code === selectedCode
+                ? "border-signal-400/60 bg-signal-950/35"
+                : "border-ink-800 bg-ink-950/45 hover:border-signal-400/40"
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-medium text-ink-100">{point.label}</span>
+              <span className="text-[11px] uppercase tracking-[0.22em] text-ink-500">{point.code}</span>
+            </div>
+            <p className="mt-2 text-xs text-ink-400">
+              {point.songCount} songs · {point.topSignal ?? "signal sparse"} · {Math.round(point.completeness * 100)}% data completeness
+            </p>
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-4 rounded-2xl border border-ink-800 bg-ink-950/60 p-4">
+        <p className="text-[10px] uppercase tracking-[0.24em] text-ink-500">Selected region</p>
+        <p className="mt-1 text-sm font-medium text-ink-100">{selectedPoint?.label ?? "No region selected"}</p>
+        {selectedPoint ? (
+          <p className="mt-2 text-sm text-ink-300">
+            {selectedPoint.songCount} songs in {selectedPoint.year}. Top signal: {selectedPoint.topSignal ?? "unknown"}.
+          </p>
+        ) : (
+          <p className="mt-2 text-sm text-ink-300">Year anchor: {year}</p>
+        )}
+      </div>
+    </div>
   );
 }
 

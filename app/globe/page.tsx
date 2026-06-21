@@ -250,11 +250,11 @@ export default function GlobePage({
       <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr] lg:items-end">
         <div className="max-w-3xl">
           <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-ink-800 bg-ink-950/55 px-4 py-2 text-[11px] uppercase tracking-[0.26em] text-ink-500">
-            <span>Tier 1: react-globe.gl</span>
+            <span>Signal-first globe</span>
             <span className="text-ink-700">·</span>
-            <span>Tier 2: 2D fallback</span>
+            <span>WebGL when available</span>
             <span className="text-ink-700">·</span>
-            <span>Tier 3: geospatial overkill</span>
+            <span>fallback atlas when not</span>
           </div>
           <h1 className="h-display mt-5 text-4xl font-semibold tracking-tight text-balance md:text-6xl">
             {t(locale, "globe.title")}

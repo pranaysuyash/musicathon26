@@ -208,7 +208,7 @@ export function YearTimeline({
       {/* Era label */}
       {eraForYear(currentYear) ? (
         <p className="mt-3 text-xs text-ink-400">
-          You're in <span className="font-semibold text-ink-200">{eraForYear(currentYear)!.label}</span> era. Click any year to jump.
+          You are in <span className="font-semibold text-ink-200">{eraForYear(currentYear)!.label}</span> era. Click any year to jump.
         </p>
       ) : null}
     </div>

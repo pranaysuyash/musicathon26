@@ -36,11 +36,11 @@ const STRINGS = {
     "articles.none": "No articles available yet.",
 
     "ask.title": "Ask the graph",
-    "ask.description": "Ask in plain language and we'll resolve terms to graph nodes, then return the shortest evidence-backed path.",
+    "ask.description": "Type a feeling, lyric, or pair of nodes and we’ll turn it into songs, routes, and evidence-backed paths.",
     "ask.back": "← Back to graph explorer",
 
     "globe.title": "Cultural weather map",
-    "globe.description": "A song-led regional weather surface for the current seeded demo corpus, showing intensity, candidate contexts, and uncertainty.",
+    "globe.description": "A song-led regional weather surface for the current seeded demo corpus, showing where the signal gets hot, thin, or uncertain.",
     "globe.region-title": "Regional weather",
 
     "scrub.title": "Timeline scrubber",
@@ -86,11 +86,11 @@ const STRINGS = {
     "articles.none": "Sin artículos disponibles aún.",
 
     "ask.title": "Preguntar al grafo",
-    "ask.description": "Escribe en lenguaje natural y resolveremos los términos a nodos del grafo para devolver el camino más corto con evidencia.",
+    "ask.description": "Escribe una sensación, una letra o dos nodos y lo convertiremos en canciones, rutas y caminos respaldados por evidencia.",
     "ask.back": "← Volver al graph explorer",
 
     "globe.title": "Mapa climático cultural",
-    "globe.description": "Una superficie regional guiada por canciones para el corpus demo actual, mostrando intensidad, contextos candidatos e incertidumbre.",
+    "globe.description": "Una superficie regional guiada por canciones para el corpus demo actual, mostrando dónde la señal se vuelve intensa, fina o incierta.",
     "globe.region-title": "Clima regional",
 
     "scrub.title": "Deslizador temporal",

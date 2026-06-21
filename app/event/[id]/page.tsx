@@ -90,6 +90,8 @@ export default function EventPage({ params, searchParams }: PageProps) {
       } as EvidencePreviewItem))
     )
     .slice(0, 4);
+  const leadRate = lead ? Math.round(lead.leadSignalRate * 100) : null;
+  const directEvidenceCount = linked.length;
 
   // Per motto 0.1, an event page should answer "is this event
   // backed by chart evidence, and how did the chart react?" — not
@@ -97,7 +99,7 @@ export default function EventPage({ params, searchParams }: PageProps) {
   // linked count, decay, and pre-event lead so the card has the
   // same shape as the theme page.
   const eventWhyReasons: string[] = [
-    `${linked.length} song${linked.length === 1 ? "" : "s"} cleared the event-link threshold (>= 0.1) with this event.`,
+    `${linked.length} song${linked.length === 1 ? "" : "s"} cleared the direct lyric threshold for this event.`,
   ];
   if (linked.length > 0) {
     eventWhyReasons.push(
@@ -105,7 +107,7 @@ export default function EventPage({ params, searchParams }: PageProps) {
     );
   } else {
     eventWhyReasons.push(
-      "No song links are currently above the threshold — this event has no chart mention by name."
+      "No direct lyric links are currently above the threshold — the event is not named in the chart songs."
     );
   }
   eventWhyReasons.push(
@@ -113,10 +115,9 @@ export default function EventPage({ params, searchParams }: PageProps) {
   );
   // Pre-event resonance: the most interesting story
   if (lead && lead.totalCorrelatedSignals > 0) {
-    const rate = Math.round(lead.leadSignalRate * 100);
-    if (rate >= 30) {
+    if ((leadRate ?? 0) >= 30) {
       eventWhyReasons.push(
-        `Pre-event resonance: ${rate}% of signals correlated with this event were already elevated in ${lead.preEventYear}.`
+        `Pre-event resonance: ${leadRate}% of the signals correlated with this event were already elevated in ${lead.preEventYear}.`
       );
     } else if (lead.preElevatedSignals > 0) {
       eventWhyReasons.push(
@@ -130,47 +131,100 @@ export default function EventPage({ params, searchParams }: PageProps) {
   }
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-10">
-      <Link href="/" className="text-xs text-ink-400 hover:text-ink-200">← VerseSignal</Link>
-      <header className="mt-4 mb-10">
-        <div className="flex items-center gap-2">
-          <Pill variant="echo">{t(locale, "event.title")}</Pill>
-          <Pill variant="mute">{event.category}</Pill>
-          <Pill variant="mute">{event.startDate} → {event.endDate ?? "present"}</Pill>
-          <Pill variant="warn">verification layer</Pill>
-          {event.regions.length > 0 ? event.regions.map((r) => (
-            <Pill key={r} variant="mute">{REGION_LABELS[r] ?? r}</Pill>
-          )) : null}
+    <main className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8 lg:py-8">
+      <Link href="/" className="text-xs uppercase tracking-[0.26em] text-ink-400 hover:text-ink-200">
+        ← VerseSignal
+      </Link>
+
+      <section className="mt-4 overflow-hidden rounded-[2.5rem] border border-ink-800 bg-[linear-gradient(145deg,rgba(9,11,18,0.98),rgba(7,8,14,0.92))] px-5 py-6 shadow-[0_0_0_1px_rgba(255,255,255,0.02),0_42px_120px_-60px_rgba(14,165,233,0.45)] sm:px-6 lg:px-8 lg:py-8">
+        <div className="grid gap-8 xl:grid-cols-[1.03fr_0.97fr] xl:items-start">
+          <div className="max-w-3xl">
+            <div className="flex flex-wrap items-center gap-2">
+              <Pill variant="echo">{t(locale, "event.title")}</Pill>
+              <Pill variant="mute">{event.category}</Pill>
+              <Pill variant="mute">{event.startDate} → {event.endDate ?? "present"}</Pill>
+              <Pill variant="warn">signal trial</Pill>
+            </div>
+            <h1 className="h-display mt-5 text-4xl leading-[0.95] text-balance text-ink-50 md:text-5xl lg:text-6xl">
+              {event.name}
+            </h1>
+            <p className="mt-4 max-w-2xl text-sm leading-7 text-pretty text-ink-300 md:text-base">
+              {event.description} This page tests the context instead of assuming it. Direct lyrics, temporal
+              resonance, and weaker echoes stay separated.
+            </p>
+            <div className="mt-5 flex flex-wrap gap-2">
+              {event.regions.map((r) => (
+                <Pill key={r} variant="mute">
+                  {REGION_LABELS[r] ?? r}
+                </Pill>
+              ))}
+              {event.relatedThemes.map((theme) => (
+                <Link
+                  key={theme}
+                  href={`/theme/${theme}`}
+                  className="pill hover:opacity-80"
+                  style={{
+                    borderColor: `${THEME_COLORS[theme as Theme] ?? "#94a3b8"}55`,
+                    background: `${THEME_COLORS[theme as Theme] ?? "#94a3b8"}11`,
+                    color: THEME_COLORS[theme as Theme] ?? "#94a3b8",
+                  }}
+                >
+                  {THEME_LABELS[theme as Theme] ?? theme}
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            {[
+              {
+                label: "Direct lyric matches",
+                value: String(directEvidenceCount),
+                note: directEvidenceCount > 0 ? "Names the context in song text" : "No direct mention in this corpus slice",
+              },
+              {
+                label: "Pre-event resonance",
+                value: leadRate !== null ? `${leadRate}%` : "n/a",
+                note: lead ? `Signals before ${lead.preEventYear}` : "No pre-event signal window",
+              },
+              {
+                label: "Signal persistence",
+                value: `${decay.length}`,
+                note: `${decay.length} year${decay.length === 1 ? "" : "s"} tracked after the event`,
+              },
+              {
+                label: "Context coverage",
+                value: String(articles.length),
+                note: "Curated articles attached to this event",
+              },
+            ].map((stat) => (
+              <div key={stat.label} className="rounded-[1.5rem] border border-ink-800 bg-ink-950/60 p-4">
+                <p className="text-[10px] uppercase tracking-[0.24em] text-ink-500">{stat.label}</p>
+                <p className="mt-2 text-3xl font-semibold tracking-tight text-ink-50">{stat.value}</p>
+                <p className="mt-2 text-sm leading-6 text-ink-400">{stat.note}</p>
+              </div>
+            ))}
+          </div>
         </div>
-        <h1 className="h-display mt-4 text-4xl font-semibold tracking-tight md:text-5xl text-balance">
-          {event.name}
-        </h1>
-        <p className="mt-3 max-w-2xl text-ink-300 text-pretty">
-          {event.description}
-          {" "}
-          This page checks whether songs support this candidate context, not whether the context should be assumed upfront.
-        </p>
-        <div className="mt-5 flex flex-wrap gap-2">
-          {event.relatedThemes.map((t) => (
-            <Link
-              key={t}
-              href={`/theme/${t}`}
-              className="pill hover:opacity-80"
-              style={{
-                borderColor: `${THEME_COLORS[t as Theme] ?? "#94a3b8"}55`,
-                background: `${THEME_COLORS[t as Theme] ?? "#94a3b8"}11`,
-                color: THEME_COLORS[t as Theme] ?? "#94a3b8",
-              }}
-            >
-              {THEME_LABELS[t as Theme] ?? t}
-            </Link>
+
+        <div className="mt-6 grid gap-3 sm:grid-cols-4">
+          {[
+            { label: "Direct", value: "named in the lyrics" },
+            { label: "Shift", value: "moved before the event" },
+            { label: "Echo", value: "rhyme without overclaiming" },
+            { label: "Reject", value: "too weak to call proof" },
+          ].map((tier) => (
+            <div key={tier.label} className="rounded-2xl border border-ink-800 bg-ink-950/55 px-3 py-2">
+              <p className="text-[10px] uppercase tracking-[0.24em] text-ink-500">{tier.label}</p>
+              <p className="mt-1 text-xs leading-5 text-ink-300">{tier.value}</p>
+            </div>
           ))}
         </div>
-      </header>
+      </section>
 
-      <section className="mb-10">
+      <section className="mb-10 mt-10">
         <BecauseCard
-          claim={`${event.name} event connections`}
+          claim={`${event.name} signal trial`}
           reasons={eventWhyReasons}
           confidence={linked.length > 0 ? linkedConfidence : 0.35}
           provenanceSources={linkedSources}
@@ -182,17 +236,14 @@ export default function EventPage({ params, searchParams }: PageProps) {
       </section>
 
       <section className="mb-10">
-        <SectionTitle subtitle="Sorted by composite link strength. Click for evidence.">
-          Songs used to verify this context ({linked.length})
+        <SectionTitle subtitle="Sorted by composite link strength. Click a song to inspect the evidence trail.">
+          Direct lyric evidence ({linked.length})
         </SectionTitle>
-        <ul className="card divide-y divide-ink-800/60">
+        <ul className="card divide-y divide-ink-800/60 overflow-hidden">
           {linked.length === 0 ? (
             <li className="p-5 text-sm text-ink-500">
-              No songs in this corpus mention the event by name
-              (per Decision 0030 the linker requires explicit
-              event-keyword evidence). The pre-event signal
-              resonance section below shows how chart mood
-              drifted before the event, even without direct links.
+              No songs in this corpus mention the event by name. The pre-event signal resonance section below
+              shows how chart mood drifted before the event, even without direct links.
             </li>
           ) : (
             linked.map((row) => (
@@ -261,7 +312,7 @@ export default function EventPage({ params, searchParams }: PageProps) {
               `lead = same direction during event, drift = opposite direction, ambient = pre-event only.`
             }
           >
-            Pre-event signal resonance
+            What the chart was already saying
             {lead.totalCorrelatedSignals > 1 ? (
               <span className="ml-2 text-xs font-normal text-ink-400">
                 · {(lead.leadSignalRate * 100).toFixed(0)}% resonance rate
@@ -337,10 +388,10 @@ export default function EventPage({ params, searchParams }: PageProps) {
       {/* Event signal decay (P2.3) — how long the event's signal persisted */}
       {decay.length > 1 ? (
         <section className="mb-10">
-          <SectionTitle subtitle="How the signal to this event changed over subsequent chart years.">
-            Signal decay over time
+          <SectionTitle subtitle="How the post-event signal changed over subsequent chart years.">
+            How long the echo lasted
           </SectionTitle>
-          <div className="card divide-y divide-ink-800/60">
+          <div className="card divide-y divide-ink-800/60 overflow-hidden">
             {decay.map((d) => (
               <div key={d.year} className="flex items-center gap-4 p-3 text-sm">
                 <span className="w-16 font-semibold tabular-nums text-ink-100">
@@ -365,7 +416,7 @@ export default function EventPage({ params, searchParams }: PageProps) {
           </div>
           {decay.length >= 2 ? (
             <p className="mt-3 text-xs text-ink-500">
-              The first year was {decay[0].dominantPosture}; by year {decay[decay.length - 1].year}, 
+              The first year was {decay[0].dominantPosture}; by year {decay[decay.length - 1].year},
               the posture shifted to {decay[decay.length - 1].dominantPosture}.
             </p>
           ) : null}

@@ -1,6 +1,6 @@
 # Session Context
 
-- Generated: 2026-06-21T09:57:01Z
+- Generated: 2026-06-21T10:03:34Z
 - Project: `musicathon`
 - Provider: `local`
 - Model: `BAAI/bge-m3`
@@ -17,30 +17,7 @@
 
 ## Project-Focused Retrieval
 
-### Architecture Decisions
-- Collection: `projects_proj_musicathon`
-- Query: `architecture decisions for musicathon`
-_Fast mode (--skip-index): retrieval skipped to keep startup non-blocking. Run `/Users/pranay/Projects/agent-start --project musicathon` for full retrieval, or set `AGENT_START_SKIP_INDEX_RETRIEVE=1` if you want retrieval with skip-index._
-
-### Project Management Workflow
-- Collection: `projects_proj_musicathon`
-- Query: `project management workflow for musicathon`
-_Fast mode (--skip-index): retrieval skipped to keep startup non-blocking. Run `/Users/pranay/Projects/agent-start --project musicathon` for full retrieval, or set `AGENT_START_SKIP_INDEX_RETRIEVE=1` if you want retrieval with skip-index._
-
-### Known Issues and Worklogs
-- Collection: `projects_proj_musicathon`
-- Query: `known issues and worklog for musicathon`
-_Fast mode (--skip-index): retrieval skipped to keep startup non-blocking. Run `/Users/pranay/Projects/agent-start --project musicathon` for full retrieval, or set `AGENT_START_SKIP_INDEX_RETRIEVE=1` if you want retrieval with skip-index._
-
-### Prompts and Guidelines
-- Collection: `projects_proj_musicathon`
-- Query: `prompts and guidelines for musicathon`
-_Fast mode (--skip-index): retrieval skipped to keep startup non-blocking. Run `/Users/pranay/Projects/agent-start --project musicathon` for full retrieval, or set `AGENT_START_SKIP_INDEX_RETRIEVE=1` if you want retrieval with skip-index._
-
-### System Learning Graph
-- Collection: `projects_proj_musicathon`
-- Query: `knowledge graph memory learning feedback loops autoresearch semantic taste graph for musicathon`
-_Fast mode (--skip-index): retrieval skipped to keep startup non-blocking. Run `/Users/pranay/Projects/agent-start --project musicathon` for full retrieval, or set `AGENT_START_SKIP_INDEX_RETRIEVE=1` if you want retrieval with skip-index._
+> NOTE: Project collection is temporarily locked by another index/search process; using shared workspace context for this run.
 
 ## Shared Cross-Project Retrieval
 

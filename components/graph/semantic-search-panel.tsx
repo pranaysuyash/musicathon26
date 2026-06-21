@@ -2,22 +2,15 @@
 
 // Semantic search panel.
 //
-// Per Decision 0030, the Ask surface is song-led. This panel lets
-// the user type a lyric, phrase, or theme and get a real cosine-
-// ranked answer from the stored song embeddings. The query itself
-// is embedded server-side via /api/semantic-search (which delegates
-// to the same sentence-transformers model used at ingest), so the
-// comparison is apples-to-apples.
-//
-// Each result links to the song page so the user can drill into
-// the evidence trail that backs the similarity score. The panel is
-// intentionally simple — a textbox, a button, and a list of
-// ranked matches — so it sits next to the PathPanel without
-// competing for attention.
+// The Ask surface is song-led: users type a feeling, lyric, or
+// half-remembered phrase and get a real cosine-ranked answer from
+// the stored song embeddings. The query itself is embedded
+// server-side via /api/semantic-search so the comparison stays
+// apples-to-apples with ingest.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Search } from "lucide-react";
+import { ArrowRight, Search, Sparkles } from "lucide-react";
 
 interface SemanticResult {
   songId: string;
@@ -38,21 +31,22 @@ interface SemanticSearchResponse {
 
 interface SemanticSearchPanelProps {
   initialQuery?: string;
+  initialData?: SemanticSearchResponse | null;
 }
 
 const PRESET_QUERIES = [
-  "I can't sleep until I feel your touch",
-  "city lights at night, alone, missing someone",
-  "lean, double cup, Percocet",
-  "love in a small town, hopeful",
-  "blinding lights, running out of time",
+  "lonely city nights",
+  "rage after injustice",
+  "party through collapse",
+  "pandemic isolation",
+  "love in a small town",
 ];
 
-export function SemanticSearchPanel({ initialQuery = "" }: SemanticSearchPanelProps) {
+export function SemanticSearchPanel({ initialQuery = "", initialData = null }: SemanticSearchPanelProps) {
   const [query, setQuery] = useState(initialQuery);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [data, setData] = useState<SemanticSearchResponse | null>(null);
+  const [data, setData] = useState<SemanticSearchResponse | null>(initialData);
 
   async function runSearch(q?: string) {
     const text = (q ?? query).trim();
@@ -77,49 +71,65 @@ export function SemanticSearchPanel({ initialQuery = "" }: SemanticSearchPanelPr
     }
   }
 
+  useEffect(() => {
+    const text = initialQuery.trim();
+    if (!text) return;
+    setQuery(text);
+    if (!initialData) {
+      void runSearch(text);
+    }
+    // We intentionally only react to the initial query prop so a
+    // navigation from the home page can boot the first result set.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialQuery]);
+
   return (
-    <section className="rounded-[2rem] border border-ink-800 bg-ink-900/55 p-5 lg:p-6">
+    <section className="relative overflow-hidden rounded-[2rem] border border-ink-800 bg-[linear-gradient(180deg,rgba(10,12,18,0.96),rgba(8,10,16,0.92))] p-5 lg:p-6">
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-signal-300/50 to-transparent" />
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-xs uppercase tracking-[0.26em] text-ink-500">Semantic search</p>
+        <div className="max-w-3xl">
+          <p className="text-xs uppercase tracking-[0.26em] text-ink-500">Search by feeling</p>
           <h2 className="h-display mt-2 text-2xl md:text-3xl">
-            Find songs by feel, not by keyword
+            Turn a phrase into songs, years, and cultural echoes
           </h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-ink-400">
-            Type a lyric, phrase, or theme. The query is embedded with the same
-            sentence-transformers model used at ingest and ranked by cosine
-            similarity against every indexed song.
+          <p className="mt-2 text-sm leading-6 text-ink-400">
+            The query is embedded with the same sentence-transformer model used at ingest, so the ranking is
+            real similarity instead of keyword coincidence.
           </p>
+        </div>
+        <div className="rounded-full border border-ink-800 bg-ink-950/65 px-3 py-1.5 text-[11px] uppercase tracking-[0.22em] text-ink-500">
+          cosine-ranked
         </div>
       </div>
 
       <form
-        className="mt-5 flex flex-wrap items-center gap-3"
+        className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center"
         onSubmit={(e) => {
           e.preventDefault();
           void runSearch();
         }}
       >
-        <div className="flex min-w-[20rem] flex-1 items-center gap-2 rounded-full border border-ink-800 bg-ink-950/60 px-4 py-2.5">
-          <Search className="h-4 w-4 text-ink-500" />
+        <div className="flex min-w-0 flex-1 items-center gap-3 rounded-full border border-ink-800 bg-ink-950/70 px-4 py-3 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
+          <Sparkles className="h-4 w-4 shrink-0 text-signal-300" />
           <input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="e.g. I can't sleep until I feel your touch"
-            className="flex-1 bg-transparent text-sm text-ink-100 placeholder:text-ink-500 focus:outline-none"
+            placeholder='e.g. "lonely city nights"'
+            className="min-w-0 flex-1 bg-transparent text-sm text-ink-100 placeholder:text-ink-500 focus:outline-none"
           />
         </div>
         <button
           type="submit"
           disabled={loading || !query.trim()}
-          className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-5 py-2.5 text-sm font-medium text-ink-950 transition hover:bg-signal-400 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex items-center justify-center gap-2 rounded-full bg-signal-500 px-5 py-3 text-sm font-semibold text-ink-950 transition hover:bg-signal-400 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {loading ? "Searching…" : "Search by feel"}
+          {!loading ? <ArrowRight className="h-4 w-4" /> : null}
         </button>
       </form>
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="mt-4 flex flex-wrap items-center gap-2">
         <span className="text-xs uppercase tracking-[0.22em] text-ink-500">Try:</span>
         {PRESET_QUERIES.map((preset) => (
           <button
@@ -137,29 +147,51 @@ export function SemanticSearchPanel({ initialQuery = "" }: SemanticSearchPanelPr
       </div>
 
       {error && (
-        <p className="mt-4 rounded-xl border border-amber-700/40 bg-amber-900/10 px-4 py-3 text-sm text-amber-200">
+        <p className="mt-4 rounded-2xl border border-amber-700/40 bg-amber-900/10 px-4 py-3 text-sm text-amber-200">
           {error}
         </p>
       )}
 
+      {loading && !data && !error ? (
+        <div className="mt-4 rounded-2xl border border-ink-800 bg-ink-950/50 px-4 py-4">
+          <div className="flex items-center gap-3">
+            <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-signal-400" />
+            <p className="text-sm text-ink-300">Searching songs that match the feeling...</p>
+          </div>
+          <div className="mt-4 space-y-2">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div
+                key={i}
+                className="h-16 animate-pulse rounded-2xl border border-ink-800 bg-ink-900/40"
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       {data && (
         <div className="mt-5">
-          <p className="text-xs uppercase tracking-[0.26em] text-ink-500">
-            {data.resultCount} matches for &ldquo;{data.query}&rdquo;
-          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-xs uppercase tracking-[0.26em] text-ink-500">
+              {data.resultCount} matches for &ldquo;{data.query}&rdquo;
+            </p>
+            <span className="rounded-full border border-ink-800 bg-ink-950/60 px-2.5 py-1 text-[10px] uppercase tracking-[0.22em] text-ink-500">
+              region {data.region}
+            </span>
+          </div>
           <ol className="mt-3 space-y-2">
             {data.results.map((r, i) => (
               <li key={`${r.songId}-${i}`}>
                 <Link
                   href={`/song/${encodeURIComponent(r.songId)}`}
-                  className="group flex items-center justify-between gap-4 rounded-xl border border-ink-800 bg-ink-950/40 px-4 py-3 transition hover:border-signal-400/40"
+                  className="group flex items-center justify-between gap-4 rounded-2xl border border-ink-800 bg-ink-950/45 px-4 py-3 transition hover:border-signal-400/40 hover:bg-ink-950/70"
                 >
                   <div className="flex min-w-0 items-center gap-3">
                     <span className="text-xs uppercase tracking-[0.22em] text-ink-500">
                       {String(i + 1).padStart(2, "0")}
                     </span>
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-ink-100">
+                      <p className="truncate text-sm font-semibold text-ink-100">
                         {r.title}
                       </p>
                       <p className="truncate text-xs text-ink-400">

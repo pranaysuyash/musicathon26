@@ -40,9 +40,9 @@ const PAGES: PageCheck[] = [
     name: "/ contains the new exploration launchpad copy",
     path: "/",
     expectInBody: [
-      "Start with 2020",
-      "Start with a song anomaly, then test candidate explanations",
-      "Context layers",
+      "Search a feeling, lyric, event, or year",
+      "Search by feel",
+      "Signal trial",
     ],
   },
   // === ERA MOSAIC: the home page surfaces a small mosaic of eras
@@ -52,6 +52,11 @@ const PAGES: PageCheck[] = [
     name: "/ shows the era mosaic instead of a wall of year tiles",
     path: "/",
     expectInBody: ["Era mosaic", "cultural eras across", "Top mood"],
+  },
+  {
+    name: "/ask shows the search-by-feel surface",
+    path: "/ask",
+    expectInBody: ["Search by feeling", "Search by feel", "PATH MODE"],
   },
   // === LENS PAGE: the headline surface. The narrative must mention
   // 2020's actual top signals (mood:energetic, mood:romantic, etc.)
@@ -100,7 +105,7 @@ const PAGES: PageCheck[] = [
   {
     name: "/event/covid_19 has the context name",
     path: "/event/versesignal:ev:covid_19",
-    expectInBody: ["COVID-19", "2020", "Context articles"],
+    expectInBody: ["COVID-19", "Direct lyric evidence", "Context articles"],
   },
   {
     name: "/event/ukraine_war shows the war",
@@ -111,7 +116,7 @@ const PAGES: PageCheck[] = [
   {
     name: "/globe shows the cultural weather map",
     path: "/globe?year=2020&region=US",
-    expectInBody: ["Cultural weather map", "react-globe.gl", "Tier 1: react-globe.gl"],
+    expectInBody: ["Cultural weather map", "Signal-first globe", "Fallback atlas"],
   },
   // === YEAR PAGE: the year overview
   {
