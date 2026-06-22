@@ -15,7 +15,7 @@ const TEMPORAL_DB_TYPES: DbEvidenceType[] = [
   "chart_entry",
   "chart_era_context",
 ];
-const EXTERNAL_DB_TYPES: DbEvidenceType[] = ["known_event_match", "manual_curation"];
+const EXTERNAL_DB_TYPES: DbEvidenceType[] = ["known_event_match"];
 const SEMANTIC_DB_TYPES: DbEvidenceType[] = [
   "mood_score",
   "embedding_similarity",

@@ -4,6 +4,7 @@ import { Fraunces, IBM_Plex_Mono, Manrope } from "next/font/google";
 import "./globals.css";
 
 import { TelemetryReporter } from "@/components/telemetry/telemetry-reporter";
+import { ProductNav } from "@/components/navigation/product-nav";
 import { resolveLocale } from "@/lib/i18n/strings";
 
 const bodyFont = Manrope({
@@ -93,6 +94,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           Skip to main content
         </a>
         <div id="main">
+          <ProductNav />
           {children}
           <TelemetryReporter />
         </div>

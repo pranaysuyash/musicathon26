@@ -28,7 +28,7 @@ export function WeakMatchWarning({
         className
       )}
     >
-      <span className="font-medium text-ink-200">Weak signal warning:{</span>{" "}
+      <span className="font-medium text-ink-200">Weak signal warning:</span>{" "}
       generic words like <span className="font-mono text-ink-100">{weakTerms.slice(0, 3).join(", ")}</span> are not proof{" "}
       {isCovid ? "for COVID-19" : `for ${eventName ?? "this event"}`} on their own.
       {isCovid && strongCovidTerms.length === 0 ? (
