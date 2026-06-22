@@ -2,10 +2,9 @@
 
 import dynamic from "next/dynamic";
 import type { ComponentType, ReactNode } from "react";
-import { Component } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { Component, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Globe, MapPinned, ShieldAlert, Sparkles } from "lucide-react";
+import { Globe, MapPinned, ShieldAlert } from "lucide-react";
 import { Color, MeshPhongMaterial } from "three";
 import type { Locale } from "@/lib/i18n/strings";
 
@@ -44,13 +43,6 @@ interface CulturalWeatherGlobeProps {
   initialRegionCode: string;
 }
 
-const REGION_HUES: Record<string, string> = {
-  highlight: "#f8e16c",
-  strong: "#38bdf8",
-  medium: "#c084fc",
-  sparse: "#94a3b8",
-};
-
 class GlobeErrorBoundary extends Component<
   { fallback: ReactNode; children: ReactNode },
   { hasError: boolean }
@@ -75,9 +67,11 @@ export function CulturalWeatherGlobe({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const globeRef = useRef<HTMLDivElement | null>(null);
   const [selectedCode, setSelectedCode] = useState(initialRegionCode);
   const [layer, setLayer] = useState<"signals" | "context" | "uncertainty" | "story">("signals");
   const [webglReady, setWebglReady] = useState<boolean | null>(null);
+  const [globeSize, setGlobeSize] = useState({ width: 600, height: 520 });
 
   useEffect(() => {
     setSelectedCode(initialRegionCode);
@@ -88,6 +82,18 @@ export function CulturalWeatherGlobe({
     const canvas = document.createElement("canvas");
     const webgl = Boolean(window.WebGLRenderingContext) && Boolean(canvas.getContext("webgl"));
     setWebglReady(webgl);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !globeRef.current) return;
+    const el = globeRef.current;
+    function updateSize() {
+      const rect = el.getBoundingClientRect();
+      setGlobeSize({ width: Math.max(320, Math.floor(rect.width)), height: Math.max(400, Math.floor(rect.height)) });
+    }
+    updateSize();
+    window.addEventListener("resize", updateSize);
+    return () => window.removeEventListener("resize", updateSize);
   }, []);
 
   const selectedPoint = useMemo(() => {
@@ -164,15 +170,74 @@ export function CulturalWeatherGlobe({
       </div>
 
       <div className="relative grid gap-0 xl:grid-cols-[1.3fr_0.7fr]">
-        <div className="relative min-h-[520px] border-b border-ink-800 xl:border-b-0 xl:border-r">
-          <AtlasFallbackSurface
-            fallbackPoints={fallbackPoints}
-            selectedCode={selectedCode}
-            selectedPoint={selectedPoint}
-            reason="WebGL globe is disabled in this browser build"
-            year={year}
-            syncRegion={syncRegion}
-          />
+        <div ref={globeRef} className="relative min-h-[520px] border-b border-ink-800 xl:border-b-0 xl:border-r">
+          <GlobeErrorBoundary
+            fallback={
+              <AtlasFallbackSurface
+                fallbackPoints={fallbackPoints}
+                selectedCode={selectedCode}
+                selectedPoint={selectedPoint}
+                reason="The 3D globe crashed. Using the fallback atlas."
+                year={year}
+                syncRegion={syncRegion}
+              />
+            }
+          >
+          {webglReady === true ? (
+            <GlobeView
+              globeImageUrl="//unpkg.com/three-globe/example/img/earth-night.jpg"
+              bumpImageUrl="//unpkg.com/three-globe/example/img/earth-topology.png"
+              backgroundImageUrl="//unpkg.com/three-globe/example/img/night-sky.png"
+              globeMaterial={globeMaterial}
+              pointsData={points}
+              pointLat="lat"
+              pointLng="lng"
+              pointColor={(p: WeatherRegionPoint) =>
+                p.code === selectedCode
+                  ? "#f8e16c"
+                  : p.completeness < 0.45
+                    ? "#94a3b8"
+                    : "#38bdf8"
+              }
+              pointAltitude={(p: WeatherRegionPoint) => Math.max(0.01, p.intensity * 0.08)}
+              pointRadius={(p: WeatherRegionPoint) => Math.max(0.25, 0.25 + p.intensity * 0.55)}
+              pointLabel={(p: WeatherRegionPoint) =>
+                `<b>${p.label}</b><br/>${p.songCount} songs · ${p.topSignal ?? "signal sparse"}`
+              }
+              onPointClick={(p: WeatherRegionPoint) => syncRegion(p.code)}
+              ringsData={ringsData}
+              ringLat="lat"
+              ringLng="lng"
+              ringColor="ringColor"
+              ringMaxRadius="radius"
+              ringPropagationSpeed={1.2}
+              ringRepeatPeriod={2200}
+              labelsData={visibleLabels}
+              labelLat="lat"
+              labelLng="lng"
+              labelText="text"
+              labelSize={1.1}
+              labelDotRadius={0.25}
+              labelColor={() => "#f8fafc"}
+              labelAltitude={0.02}
+              width={globeSize.width}
+              height={globeSize.height}
+            />
+          ) : (
+            <AtlasFallbackSurface
+              fallbackPoints={fallbackPoints}
+              selectedCode={selectedCode}
+              selectedPoint={selectedPoint}
+              reason={
+                webglReady === false
+                  ? "WebGL is not available in this browser"
+                  : "Checking WebGL availability…"
+              }
+              year={year}
+              syncRegion={syncRegion}
+            />
+          )}
+          </GlobeErrorBoundary>
         </div>
 
         <aside className="flex flex-col gap-5 p-6 lg:p-8">
