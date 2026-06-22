@@ -184,7 +184,7 @@ export default function EventPage({ params, searchParams }: { params: { id: stri
           <div className="max-w-2xl">
             <p className="text-xs uppercase tracking-[0.26em] text-ink-500">Song matches by evidence class</p>
             <h2 className="h-display mt-2 text-2xl md:text-3xl">
-              {activeTab === "all" ? "All connections" : `${UI_EVIDENCE_LABELS[activeTab]} matches`}
+              {activeTab === "all" ? "All connections" : `${UI_EVIDENCE_LABELS[activeTab].label} matches`}
             </h2>
             <p className="mt-2 text-sm text-ink-400">
               {counts.direct_lyric} direct lyric · {counts.event_entity} entity · {counts.semantic_theme} semantic · {counts.temporal_only} temporal · {counts.weak_noisy} weak/noisy · {counts.rejected} rejected
