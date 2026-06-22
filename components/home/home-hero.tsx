@@ -3,6 +3,7 @@ import { ArrowRight, Search } from "lucide-react";
 import { GraphPreviewPanel } from "@/components/home/graph-preview-panel";
 import { WorldLensPreview } from "@/components/home/world-lens-preview";
 import { SignalSeismograph, type SeismographSignal } from "@/components/home/signal-seismograph";
+import { SignalTrailPreview } from "@/components/home/signal-trail-preview";
 
 function buildLangPath(path: string, locale: string, query?: Record<string, string>) {
   const params = new URLSearchParams();
@@ -92,6 +93,8 @@ export function HomeHero({
         </div>
 
         <div className="grid gap-4">
+          <SignalTrailPreview locale={locale} />
+
           <section className="relative overflow-hidden rounded-[2rem] border border-ink-800 bg-[linear-gradient(180deg,rgba(9,11,18,0.98),rgba(7,8,14,0.94))] p-5 shadow-[0_22px_80px_-48px_rgba(14,165,233,0.55)] lg:p-6">
             <div className="absolute inset-0">
               <div className="absolute -left-20 top-0 h-56 w-56 rounded-full bg-signal-500/12 blur-3xl" />
