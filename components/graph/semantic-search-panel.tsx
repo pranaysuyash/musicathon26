@@ -1,16 +1,10 @@
 "use client";
 
-// Semantic search panel.
-//
-// The Ask surface is song-led: users type a feeling, lyric, or
-// half-remembered phrase and get a real cosine-ranked answer from
-// the stored song embeddings. The query itself is embedded
-// server-side via /api/semantic-search so the comparison stays
-// apples-to-apples with ingest.
-
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Search, Sparkles } from "lucide-react";
+import { EvidenceBadge } from "@/components/evidence/evidence-badge";
+import type { UiEvidenceType } from "@/lib/evidence/types";
 
 interface SemanticResult {
   songId: string;
@@ -19,6 +13,7 @@ interface SemanticResult {
   year: number;
   region: string;
   similarity: number;
+  matchType?: UiEvidenceType;
 }
 
 interface SemanticSearchResponse {
@@ -57,8 +52,8 @@ export function SemanticSearchPanel({ initialQuery = "", initialData = null }: S
       const params = new URLSearchParams({ q: text, top: "8" });
       const r = await fetch(`/api/semantic-search?${params}`);
       if (r.status === 503) {
-        setError("Semantic search needs the Python embedder; ask the operator to enable it.");
-        setData(null);
+        setError("Semantic search backend (Python embedder) is not enabled. The UI structure below shows how results will be grouped when it is.");
+        setData({ query: text, top: 8, region: "US", resultCount: 0, results: [] });
         return;
       }
       if (!r.ok) throw new Error(`search failed: ${r.status}`);
@@ -78,10 +73,36 @@ export function SemanticSearchPanel({ initialQuery = "", initialData = null }: S
     if (!initialData) {
       void runSearch(text);
     }
-    // We intentionally only react to the initial query prop so a
-    // navigation from the home page can boot the first result set.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialQuery]);
+
+  const groupedResults: Record<UiEvidenceType, SemanticResult[]> = data
+    ? data.results.reduce(
+        (acc, r) => {
+          const type = r.matchType ?? "semantic_theme";
+          acc[type] ??= [];
+          acc[type].push(r);
+          return acc;
+        },
+        {
+          direct_lyric: [],
+          event_entity: [],
+          semantic_theme: [],
+          temporal_only: [],
+          external_confirmation: [],
+          weak_noisy: [],
+          rejected: [],
+        } as Record<UiEvidenceType, SemanticResult[]>
+      )
+    : {
+        direct_lyric: [],
+        event_entity: [],
+        semantic_theme: [],
+        temporal_only: [],
+        external_confirmation: [],
+        weak_noisy: [],
+        rejected: [],
+      };
 
   return (
     <section className="relative overflow-hidden rounded-[2rem] border border-ink-800 bg-[linear-gradient(180deg,rgba(10,12,18,0.96),rgba(8,10,16,0.92))] p-5 lg:p-6">
@@ -89,13 +110,8 @@ export function SemanticSearchPanel({ initialQuery = "", initialData = null }: S
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="max-w-3xl">
           <p className="text-xs uppercase tracking-[0.26em] text-ink-500">Search by feeling</p>
-          <h2 className="h-display mt-2 text-2xl md:text-3xl">
-            Turn a phrase into songs, years, and cultural echoes
-          </h2>
-          <p className="mt-2 text-sm leading-6 text-ink-400">
-            The query is embedded with the same sentence-transformer model used at ingest, so the ranking is
-            real similarity instead of keyword coincidence.
-          </p>
+          <h2 className="h-display mt-2 text-2xl md:text-3xl">Turn a phrase into songs</h2>
+          <p className="mt-2 text-sm leading-6 text-ink-400">Results group by how they matched: direct lyric, semantic theme, entity, or temporal window.</p>
         </div>
         <div className="rounded-full border border-ink-800 bg-ink-950/65 px-3 py-1.5 text-[11px] uppercase tracking-[0.22em] text-ink-500">
           cosine-ranked
@@ -179,42 +195,48 @@ export function SemanticSearchPanel({ initialQuery = "", initialData = null }: S
               region {data.region}
             </span>
           </div>
-          <ol className="mt-3 space-y-2">
-            {data.results.map((r, i) => (
-              <li key={`${r.songId}-${i}`}>
-                <Link
-                  href={`/song/${encodeURIComponent(r.songId)}`}
-                  className="group flex items-center justify-between gap-4 rounded-2xl border border-ink-800 bg-ink-950/45 px-4 py-3 transition hover:border-signal-400/40 hover:bg-ink-950/70"
-                >
-                  <div className="flex min-w-0 items-center gap-3">
-                    <span className="text-xs uppercase tracking-[0.22em] text-ink-500">
-                      {String(i + 1).padStart(2, "0")}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-ink-100">
-                        {r.title}
-                      </p>
-                      <p className="truncate text-xs text-ink-400">
-                        {r.artist} · {r.year} · {r.region}
-                      </p>
-                    </div>
+
+          {data.results.length === 0 ? (
+            <p className="mt-3 text-sm text-ink-400">No songs in the current region match this query.</p>
+          ) : (
+            <div className="mt-3 space-y-5">
+              {Object.entries(groupedResults).map(([type, results]) => (
+                <div key={type}>
+                  <div className="mb-2 flex items-center gap-2">
+                    <EvidenceBadge type={type as UiEvidenceType} />
+                    <span className="text-xs text-ink-500">{results.length} result{results.length === 1 ? "" : "s"}</span>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className="font-mono text-sm text-signal-200">
-                      {r.similarity.toFixed(3)}
-                    </span>
-                    <span className="rounded-full bg-signal-500/15 px-2 py-0.5 text-[0.65rem] uppercase tracking-[0.22em] text-signal-200">
-                      cosine
-                    </span>
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ol>
-          {data.results.length === 0 && (
-            <p className="mt-3 text-sm text-ink-400">
-              No songs in the current region match this query.
-            </p>
+                  <ol className="space-y-2">
+                    {results.map((r, i) => (
+                      <li key={`${r.songId}-${i}`}>
+                        <Link
+                          href={`/song/${encodeURIComponent(r.songId)}`}
+                          className="group flex items-center justify-between gap-4 rounded-2xl border border-ink-800 bg-ink-950/45 px-4 py-3 transition hover:border-signal-400/40 hover:bg-ink-950/70"
+                        >
+                          <div className="flex min-w-0 items-center gap-3">
+                            <span className="text-xs uppercase tracking-[0.22em] text-ink-500">
+                              {String(i + 1).padStart(2, "0")}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold text-ink-100">{r.title}</p>
+                              <p className="truncate text-xs text-ink-400">
+                                {r.artist} · {r.year} · {r.region}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="font-mono text-sm text-signal-200">{r.similarity.toFixed(3)}</span>
+                            <span className="rounded-full bg-signal-500/15 px-2 py-0.5 text-[0.65rem] uppercase tracking-[0.22em] text-signal-200">
+                              cosine
+                            </span>
+                          </div>
+                        </Link>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}

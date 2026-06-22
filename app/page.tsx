@@ -1,12 +1,10 @@
 import type { Metadata } from "next";
 import { initDb } from "@/lib/db";
-import { getAllEvents, getAllYears, getEraOverview } from "@/lib/db/queries";
+import { getAllEvents, getAllYears, getEraOverview, getYearSignals } from "@/lib/db/queries";
 import { HomeHero } from "@/components/home/home-hero";
 import { ExplorationLensGrid } from "@/components/home/exploration-lens-grid";
 import { FeaturedSignalStory } from "@/components/home/featured-signal-story";
 import { EvidenceQualityPreview } from "@/components/home/evidence-quality-preview";
-import { GraphPreviewPanel } from "@/components/home/graph-preview-panel";
-import { WorldLensPreview } from "@/components/home/world-lens-preview";
 import { CompactEraTimeline } from "@/components/home/compact-era-timeline";
 import { resolveLocale } from "@/lib/i18n/strings";
 
@@ -32,6 +30,16 @@ export default function Home({
   const yearCounts = getAllYears("US");
   const totalSongs = yearCounts.reduce((a, b) => a + b.songCount, 0);
   const eraOverview = getEraOverview("US");
+  const seismographSignals = getYearSignals(2020, "US", 12)
+    .filter((s) => s.signalType === "theme" || s.signalType === "mood" || s.signalType === "entity")
+    .sort((a, b) => b.songCount - a.songCount)
+    .slice(0, 6)
+    .map((s) => ({
+      signal: s.signal,
+      score: s.score,
+      songCount: s.songCount,
+      signalType: s.signalType as "theme" | "mood" | "entity",
+    }));
 
   return (
     <main className="mx-auto max-w-7xl space-y-8 px-4 py-6 sm:px-6 lg:px-8 lg:py-10">
@@ -40,6 +48,7 @@ export default function Home({
         totalSongs={totalSongs}
         yearCount={yearCounts.length}
         eventCount={events.length}
+        signals={seismographSignals}
       />
 
       <ExplorationLensGrid locale={locale} />
@@ -47,11 +56,6 @@ export default function Home({
       <div className="grid gap-8 lg:grid-cols-2">
         <FeaturedSignalStory locale={locale} />
         <EvidenceQualityPreview />
-      </div>
-
-      <div className="grid gap-8 lg:grid-cols-2">
-        <GraphPreviewPanel />
-        <WorldLensPreview locale={locale} />
       </div>
 
       <CompactEraTimeline eras={eraOverview} locale={locale} />
