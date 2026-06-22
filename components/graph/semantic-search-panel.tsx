@@ -54,7 +54,7 @@ export function SemanticSearchPanel({ initialQuery = "", initialData = null }: S
       const params = new URLSearchParams({ q: text, top: "8" });
       const r = await fetch(`/api/semantic-search?${params}`);
       if (r.status === 503) {
-        setError("Semantic search backend (Python embedder) is not enabled. The UI structure below shows how results will be grouped when it is.");
+        setError("warming");
         setData({ query: text, top: 8, region: "US", resultCount: 0, results: [] });
         return;
       }
@@ -125,7 +125,7 @@ export function SemanticSearchPanel({ initialQuery = "", initialData = null }: S
           <p className="mt-2 text-sm leading-6 text-ink-400">Results group by how they matched: direct lyric, semantic theme, entity, or temporal window.</p>
         </div>
         <div className="rounded-full border border-ink-800 bg-ink-950/65 px-3 py-1.5 text-[11px] uppercase tracking-[0.22em] text-ink-500">
-          cosine-ranked
+          nearest feeling matches
         </div>
       </div>
 
@@ -174,9 +174,9 @@ export function SemanticSearchPanel({ initialQuery = "", initialData = null }: S
       </div>
 
       {error && (
-        <p className="mt-4 rounded-2xl border border-amber-700/40 bg-amber-900/10 px-4 py-3 text-sm text-amber-200">
-          {error}
-        </p>
+        <div className="mt-4 rounded-2xl border border-amber-700/40 bg-amber-900/10 px-4 py-3 text-sm text-amber-200">
+          Feeling search is warming up. Try a prepared trail below while the backend loads.
+        </div>
       )}
 
       {loading && !data && !error ? (
