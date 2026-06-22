@@ -79,9 +79,19 @@ export function CulturalWeatherGlobe({
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const canvas = document.createElement("canvas");
-    const webgl = Boolean(window.WebGLRenderingContext) && Boolean(canvas.getContext("webgl"));
-    setWebglReady(webgl);
+    function hasWebGL(): boolean {
+      try {
+        const canvas = document.createElement("canvas");
+        const gl =
+          canvas.getContext("webgl2") ||
+          canvas.getContext("webgl") ||
+          canvas.getContext("experimental-webgl");
+        return Boolean(gl);
+      } catch {
+        return false;
+      }
+    }
+    setWebglReady(hasWebGL());
   }, []);
 
   useEffect(() => {
@@ -142,7 +152,7 @@ export function CulturalWeatherGlobe({
     } else {
       params.delete("lang");
     }
-    router.replace(`${pathname}?${params.toString()}`);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }
 
   const globeMaterial = useMemo(
@@ -170,101 +180,104 @@ export function CulturalWeatherGlobe({
       </div>
 
       <div className="relative grid gap-0 xl:grid-cols-[1.3fr_0.7fr]">
-        <div ref={globeRef} className="relative min-h-[520px] border-b border-ink-800 xl:border-b-0 xl:border-r">
-          <GlobeErrorBoundary
-            fallback={
-              <AtlasFallbackSurface
-                fallbackPoints={fallbackPoints}
-                selectedCode={selectedCode}
-                selectedPoint={selectedPoint}
-                reason="The 3D globe crashed. Using the fallback atlas."
-                year={year}
-                syncRegion={syncRegion}
+        <div className="relative min-h-[520px] border-b border-ink-800 xl:border-b-0 xl:border-r">
+          {webglReady === null ? (
+            <div className="flex h-full min-h-[520px] items-center justify-center">
+              <div className="text-center">
+                <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-ink-700 border-t-signal-400" />
+                <p className="mt-4 text-xs uppercase tracking-[0.3em] text-ink-500">Warming up the signal field</p>
+              </div>
+            </div>
+          ) : webglReady === true ? (
+            <GlobeErrorBoundary
+              fallback={
+                <AtlasFallbackSurface
+                  fallbackPoints={fallbackPoints}
+                  selectedCode={selectedCode}
+                  selectedPoint={selectedPoint}
+                  reason="The signal field could not load. Using the map view instead."
+                  year={year}
+                  syncRegion={syncRegion}
+                />
+              }
+            >
+              <GlobeView
+                ref={globeRef}
+                globeImageUrl="//unpkg.com/three-globe/example/img/earth-night.jpg"
+                bumpImageUrl="//unpkg.com/three-globe/example/img/earth-topology.png"
+                backgroundImageUrl="//unpkg.com/three-globe/example/img/night-sky.png"
+                globeMaterial={globeMaterial}
+                pointsData={points}
+                pointLat="lat"
+                pointLng="lng"
+                pointColor={(p: WeatherRegionPoint) =>
+                  p.code === selectedCode
+                    ? "#f8e16c"
+                    : p.completeness < 0.45
+                      ? "#94a3b8"
+                      : "#38bdf8"
+                }
+                pointAltitude={(p: WeatherRegionPoint) => Math.max(0.01, p.intensity * 0.08)}
+                pointRadius={(p: WeatherRegionPoint) => Math.max(0.25, 0.25 + p.intensity * 0.55)}
+                pointLabel={(p: WeatherRegionPoint) =>
+                  `<b>${p.label}</b><br/>${p.songCount} songs · ${p.topSignal ?? "signal sparse"}`
+                }
+                onPointClick={(p: WeatherRegionPoint) => syncRegion(p.code)}
+                ringsData={ringsData}
+                ringLat="lat"
+                ringLng="lng"
+                ringColor="ringColor"
+                ringMaxRadius="radius"
+                ringPropagationSpeed={1.2}
+                ringRepeatPeriod={2200}
+                labelsData={visibleLabels}
+                labelLat="lat"
+                labelLng="lng"
+                labelText="text"
+                labelSize={1.1}
+                labelDotRadius={0.25}
+                labelColor={() => "#f8fafc"}
+                labelAltitude={0.02}
+                width={globeSize.width}
+                height={globeSize.height}
               />
-            }
-          >
-          {webglReady === true ? (
-            <GlobeView
-              globeImageUrl="//unpkg.com/three-globe/example/img/earth-night.jpg"
-              bumpImageUrl="//unpkg.com/three-globe/example/img/earth-topology.png"
-              backgroundImageUrl="//unpkg.com/three-globe/example/img/night-sky.png"
-              globeMaterial={globeMaterial}
-              pointsData={points}
-              pointLat="lat"
-              pointLng="lng"
-              pointColor={(p: WeatherRegionPoint) =>
-                p.code === selectedCode
-                  ? "#f8e16c"
-                  : p.completeness < 0.45
-                    ? "#94a3b8"
-                    : "#38bdf8"
-              }
-              pointAltitude={(p: WeatherRegionPoint) => Math.max(0.01, p.intensity * 0.08)}
-              pointRadius={(p: WeatherRegionPoint) => Math.max(0.25, 0.25 + p.intensity * 0.55)}
-              pointLabel={(p: WeatherRegionPoint) =>
-                `<b>${p.label}</b><br/>${p.songCount} songs · ${p.topSignal ?? "signal sparse"}`
-              }
-              onPointClick={(p: WeatherRegionPoint) => syncRegion(p.code)}
-              ringsData={ringsData}
-              ringLat="lat"
-              ringLng="lng"
-              ringColor="ringColor"
-              ringMaxRadius="radius"
-              ringPropagationSpeed={1.2}
-              ringRepeatPeriod={2200}
-              labelsData={visibleLabels}
-              labelLat="lat"
-              labelLng="lng"
-              labelText="text"
-              labelSize={1.1}
-              labelDotRadius={0.25}
-              labelColor={() => "#f8fafc"}
-              labelAltitude={0.02}
-              width={globeSize.width}
-              height={globeSize.height}
-            />
+            </GlobeErrorBoundary>
           ) : (
             <AtlasFallbackSurface
               fallbackPoints={fallbackPoints}
               selectedCode={selectedCode}
               selectedPoint={selectedPoint}
-              reason={
-                webglReady === false
-                  ? "WebGL is not available in this browser"
-                  : "Checking WebGL availability…"
-              }
+              reason="Your browser is using the map view. The signal story is the same."
               year={year}
               syncRegion={syncRegion}
             />
           )}
-          </GlobeErrorBoundary>
         </div>
 
         <aside className="flex flex-col gap-5 p-6 lg:p-8">
           <div>
-            <p className="text-xs uppercase tracking-[0.28em] text-ink-500">Why this surface exists</p>
-            <h3 className="mt-3 text-2xl font-semibold text-ink-100">Cultural weather, not a map gimmick.</h3>
+            <p className="text-xs uppercase tracking-[0.28em] text-ink-500">World signal field</p>
+            <h3 className="mt-3 text-2xl font-semibold text-ink-100">Cultural weather, region by region.</h3>
             <p className="mt-3 text-sm leading-7 text-ink-300">
-              The globe is the first visual layer where signal intensity, candidate explanations, and uncertainty can
-              live together. It should feel playable, but it should never imply false precision.
+              Signal intensity, candidate contexts, and uncertainty all share the same map. The richer a region’s data, the more confidently it glows.
             </p>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
             <InfoCard
               icon={<Globe className="h-4 w-4 text-signal-300" />}
-              title="WebGL globe"
-              body="Use the live globe first. It gives the fastest path to a rich, explorable surface with rings, labels, and region pulses."
+              title="Signal field"
+              body="Each pulse is a region’s chart activity. Height and color show signal strength, not just popularity."
             />
             <InfoCard
               icon={<MapPinned className="h-4 w-4 text-echo-300" />}
-              title="Fallback atlas"
-              body="If WebGL is unavailable, degrade to a high-contrast 2D atlas with the same region stories and selection flow."
+              title="Context weather"
+              body="Click any region to see the moods, themes, and candidate events that shaped its sound."
             />
             <InfoCard
               icon={<ShieldAlert className="h-4 w-4 text-amber-300" />}
               title="Honesty guardrail"
-              body="Treat a full geospatial engine as the last resort. VerseSignal needs cultural exploration, not terrain infrastructure."
+              body="Sparse regions stay dim. We do not pretend weak data is a strong cultural signal."
             />
           </div>
 

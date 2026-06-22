@@ -252,9 +252,11 @@ export default function GlobePage({
           <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-ink-800 bg-ink-950/55 px-4 py-2 text-[11px] uppercase tracking-[0.26em] text-ink-500">
             <span>World Lens</span>
             <span className="text-ink-700">·</span>
-            <span>Signal-first globe</span>
+            <span>Signal field</span>
             <span className="text-ink-700">·</span>
-            <span>WebGL when available</span>
+            <span>Context weather</span>
+            <span className="text-ink-700">·</span>
+            <span>Uncertainty map</span>
           </div>
           <h1 className="h-display mt-5 text-4xl font-semibold tracking-tight text-balance md:text-6xl">
             Was the world singing the same thing?
