@@ -7,6 +7,24 @@ function buildLangPath(path: string, locale: string) {
   return `${path}?lang=${locale}`;
 }
 
+const ERA_FEEL: Record<string, string> = {
+  broadcast_counterculture: "Big-band longing meets youth revolt",
+  album_rock_aor: "Arena guitars and post-Watergate doubt",
+  mtv_blockbuster: "Neon spectacle and video identity",
+  cd_superstar: "Polished confession in a boombox world",
+  download_disruption: "Shuffle-era heartbreak and piracy panic",
+  global_streaming_era: "Algorithm anxiety and pandemic rupture",
+};
+
+const ERA_DOOR: Record<string, string> = {
+  broadcast_counterculture: "Broadcast-era heartbreak",
+  album_rock_aor: "Guitar-age introspection",
+  mtv_blockbuster: "MTV spectacle and identity",
+  cd_superstar: "Polished pop confession",
+  download_disruption: "Shuffle-era heartbreak",
+  global_streaming_era: "Streaming anxiety",
+};
+
 export function CompactEraTimeline({
   eras,
   locale,
@@ -40,15 +58,18 @@ export function CompactEraTimeline({
             "from-amber-500/80 via-amber-300/80 to-transparent",
           ];
           const color = colors[index % colors.length];
+          const feel = ERA_FEEL[era.eraId] ?? ERA_DOOR[era.eraId] ?? `${era.eraLabel} signal`;
+          const door = ERA_DOOR[era.eraId] ?? era.eraLabel;
           return (
             <Link
               key={era.eraId}
               href={buildLangPath(`/lens/${era.eraStart}`, locale)}
-              className="group relative flex w-48 shrink-0 flex-col overflow-hidden rounded-[1.4rem] border border-ink-800 bg-ink-950/60 p-4 transition hover:-translate-y-0.5 hover:border-signal-400/40"
+              className="group relative flex w-52 shrink-0 flex-col overflow-hidden rounded-[1.4rem] border border-ink-800 bg-ink-950/60 p-4 transition hover:-translate-y-0.5 hover:border-signal-400/40"
             >
               <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${color}`} />
               <p className="text-xs uppercase tracking-[0.22em] text-ink-500">{era.eraStart}–{era.eraEnd}</p>
-              <p className="mt-1 text-lg font-semibold tracking-tight text-ink-50">{era.eraLabel}</p>
+              <p className="mt-1 text-lg font-semibold tracking-tight text-ink-50">{door}</p>
+              <p className="mt-1 text-xs italic leading-5 text-ink-300">“{feel}”</p>
               <div className="mt-3 space-y-1 text-xs">
                 <p className="text-ink-500">{era.songCount} songs · {era.eventCount} contexts</p>
                 <p className="text-ink-400">{era.topMood ?? "no top mood"}</p>
