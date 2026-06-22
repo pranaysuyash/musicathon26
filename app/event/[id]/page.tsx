@@ -14,6 +14,7 @@ import { EvidenceRankedSongList } from "@/components/event/evidence-ranked-song-
 import { CovidSkepticismPanel } from "@/components/evidence/weak-match-warning";
 import { EventGraphPreview } from "@/components/event/event-graph-preview";
 import { WorldResponsePanel } from "@/components/event/world-response";
+import { EventVerdictPanel } from "@/components/event/event-verdict-panel";
 import {
   normalizeEvidence,
   deriveUiEvidenceType,
@@ -163,6 +164,20 @@ export default function EventPage({ params, searchParams }: { params: { id: stri
       />
 
       {isCovid ? <CovidSkepticismPanel /> : null}
+
+      <EventVerdictPanel
+        eventName={event.name}
+        counts={counts}
+        directSongs={connections
+          .filter((c) => c.uiEvidenceType === "direct_lyric" || c.uiEvidenceType === "external_confirmation")
+          .slice(0, 5)
+          .map((c) => ({ songId: c.songId, title: c.songTitle, artist: c.songArtist }))}
+        weakSongs={connections
+          .filter((c) => c.uiEvidenceType === "weak_noisy" || c.uiEvidenceType === "rejected")
+          .slice(0, 3)
+          .map((c) => ({ songId: c.songId, title: c.songTitle, artist: c.songArtist }))}
+        isCovid={isCovid}
+      />
 
       <section className="rounded-[2rem] border border-ink-800 bg-ink-950/60 p-5 lg:p-6">
         <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
