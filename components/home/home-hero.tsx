@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { ArrowRight, Search } from "lucide-react";
 import { GraphPreviewPanel } from "@/components/home/graph-preview-panel";
-import { WorldLensPreview } from "@/components/home/world-lens-preview";
 import { SignalSeismograph, type SeismographSignal } from "@/components/home/signal-seismograph";
 import { SignalTrailPreview } from "@/components/home/signal-trail-preview";
 
@@ -121,7 +120,52 @@ export function HomeHero({
 
           <div className="grid gap-4 lg:grid-cols-2">
             <GraphPreviewPanel />
-            <WorldLensPreview locale={locale} />
+            <div className="rounded-[2rem] border border-ink-800 bg-[linear-gradient(160deg,rgba(11,12,18,0.96),rgba(8,10,16,0.9))] p-5 lg:p-6">
+              <p className="text-xs uppercase tracking-[0.26em] text-ink-500">World lens</p>
+              <h2 className="h-display mt-2 text-2xl md:text-3xl">Was the world singing the same thing?</h2>
+              <div className="mt-5 rounded-[1.6rem] border border-ink-800 bg-ink-950/45 p-4">
+                <div className="relative mx-auto aspect-square w-full max-w-[240px]">
+                  <div className="absolute inset-0 rounded-full border border-signal-400/20 bg-[radial-gradient(circle_at_50%_35%,rgba(56,189,248,0.18),rgba(10,12,18,0.92)_58%,rgba(2,6,23,0.98))]" />
+                  <div className="absolute inset-[11%] rounded-full border border-ink-700/70" />
+                  <div className="absolute inset-[24%] rounded-full border border-ink-700/50" />
+                  <div className="absolute left-1/2 top-[11%] h-[78%] w-px -translate-x-1/2 bg-gradient-to-b from-transparent via-signal-300/40 to-transparent" />
+                  <div className="absolute left-[11%] top-1/2 h-px w-[78%] -translate-y-1/2 bg-gradient-to-r from-transparent via-signal-300/40 to-transparent" />
+                  {[
+                    { label: "US", left: "24%", top: "34%", tone: "bg-signal-400" },
+                    { label: "IN", left: "67%", top: "39%", tone: "bg-echo-400" },
+                    { label: "UK", left: "51%", top: "28%", tone: "bg-amber-300" },
+                    { label: "GLOBAL", left: "50%", top: "66%", tone: "bg-emerald-400" },
+                  ].map((node) => (
+                    <div key={node.label} className="absolute" style={{ left: node.left, top: node.top }}>
+                      <div className={`h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full ${node.tone}`} />
+                      <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] uppercase tracking-[0.22em] text-ink-300">
+                        {node.label}
+                      </div>
+                    </div>
+                  ))}
+                  <div className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full border border-ink-700 bg-ink-950/75 px-3 py-1 text-[10px] uppercase tracking-[0.22em] text-ink-400">
+                    world lens
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  {[
+                    { label: "United States", text: "isolation / protest / anger", note: "COVID-19, BLM 2020" },
+                    { label: "India", text: "lockdown / migration / home / anxiety", note: "COVID-19 lockdown" },
+                    { label: "United Kingdom", text: "pandemic / isolation / escapism", note: "COVID-19, Brexit fallout" },
+                    { label: "Global", text: "dance escape / loneliness / uncertainty", note: "COVID-19 pandemic" },
+                  ].map((region) => (
+                    <div key={region.label} className="rounded-[1.2rem] border border-ink-800 bg-ink-950/55 p-4">
+                      <div className="flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full bg-signal-300" />
+                        <span className="text-sm font-medium text-ink-100">{region.label}</span>
+                      </div>
+                      <p className="mt-2 text-sm leading-6 text-ink-300">{region.text}</p>
+                      <p className="mt-1 text-xs text-ink-500">{region.note}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
