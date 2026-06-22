@@ -10,6 +10,19 @@ const VERCEL_DB_PATH = "/tmp/versesignal.db";
 
 let _db: Database.Database | null = null;
 
+function findBundledDb(): string | null {
+  const candidates = [
+    // Vercel serverless function root
+    "/var/task/data/versesignal.db",
+    // Local development
+    LOCAL_DB_PATH,
+  ];
+  for (const p of candidates) {
+    if (existsSync(p)) return p;
+  }
+  return null;
+}
+
 function resolveDbPath(): string {
   const override = process.env.VERSESIGNAL_DB;
   if (override) return override;
@@ -18,11 +31,15 @@ function resolveDbPath(): string {
   // before opening it. Local dev keeps using the repo copy directly.
   if (process.env.VERCEL) {
     mkdirSync("/tmp", { recursive: true });
-    if (!existsSync(VERCEL_DB_PATH) && existsSync(LOCAL_DB_PATH)) {
-      copyFileSync(LOCAL_DB_PATH, VERCEL_DB_PATH);
+    const bundled = findBundledDb();
+    if (bundled && !existsSync(VERCEL_DB_PATH)) {
+      copyFileSync(bundled, VERCEL_DB_PATH);
     }
     return VERCEL_DB_PATH;
   }
+
+  const bundled = findBundledDb();
+  if (bundled) return bundled;
 
   mkdirSync(join(process.cwd(), "data"), { recursive: true });
   return LOCAL_DB_PATH;
@@ -40,9 +57,18 @@ export function getDb(): Database.Database {
 
 export function initDb(): void {
   const db = getDb();
-  const schemaPath = join(process.cwd(), "scripts", "schema.sql");
-  const schema = readFileSync(schemaPath, "utf8");
-  db.exec(schema);
+  const schemaCandidates = [
+    "/var/task/scripts/schema.sql",
+    join(process.cwd(), "scripts", "schema.sql"),
+  ];
+  let schema = "";
+  for (const p of schemaCandidates) {
+    if (existsSync(p)) {
+      schema = readFileSync(p, "utf8");
+      break;
+    }
+  }
+  if (schema) db.exec(schema);
 }
 
 export function closeDb(): void {

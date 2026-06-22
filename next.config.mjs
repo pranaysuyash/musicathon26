@@ -10,6 +10,9 @@ const nextConfig = {
         "data/versesignal.db-wal",
       ],
     },
+    outputFileTracingIncludes: {
+      "*": ["data/versesignal.db", "scripts/schema.sql"],
+    },
     serverComponentsExternalPackages: ["better-sqlite3"],
   },
 };
