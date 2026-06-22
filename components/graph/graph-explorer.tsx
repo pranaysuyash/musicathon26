@@ -7,6 +7,10 @@ import type { GraphEdge, GraphNode, Evidence } from "@/lib/types";
 import { EvidenceDrawer } from "@/components/evidence/evidence-drawer";
 import { PathPanel } from "@/components/graph/path-panel";
 import { Pill } from "@/components/ui/primitives";
+import { EvidenceBadge } from "@/components/evidence/evidence-badge";
+import { UI_EVIDENCE_LABELS, type UiEvidenceType } from "@/lib/evidence/types";
+
+type GraphMode = "story" | "explorer" | "evidence" | "weak" | "compare";
 
 const GraphView = dynamic(() =>
   import("@/components/graph/graph-view").then((m) => m.GraphView), {
@@ -48,6 +52,9 @@ export function GraphExplorer() {
   // year with the richest signal profile: COVID + BLM + election).
   const rootId = sp.get("rootId") ?? "versesignal:n:year:2020";
   const hops = Number(sp.get("hops") ?? "2");
+  const mode: GraphMode =
+    (sp.get("mode") as GraphMode | null) ??
+    (sp.get("storyStep") ? "story" : "story");
   const [data, setData] = useState<GraphResponse | null>(null);
   // Start in loading state so the user's first paint shows progress,
   // not the empty state. The useEffect below kicks the fetch; for SSR
@@ -174,6 +181,25 @@ export function GraphExplorer() {
     setGraphPulse(true);
   }
 
+  function setMode(next: GraphMode) {
+    const url = new URL(window.location.href);
+    if (next === "story") {
+      url.searchParams.set("mode", "story");
+      url.searchParams.set("storyStep", "0");
+      url.searchParams.set("rootType", "year");
+      url.searchParams.set("rootId", "versesignal:n:year:2020");
+      url.searchParams.set("hops", "2");
+    } else {
+      url.searchParams.set("mode", next);
+      url.searchParams.delete("storyStep");
+      if (next === "weak") {
+        url.searchParams.set("hops", "3");
+      }
+    }
+    router.push(url.pathname + url.search);
+    unlockMilestone(`mode_${next}`, `Switched to ${next} mode.`);
+  }
+
   function onPathFound() {
     setPathPulse(true);
     unlockMilestone("path_found", "Discovery complete: shortest path found.");
@@ -204,10 +230,47 @@ export function GraphExplorer() {
           <Pill variant="echo">{data.root.nodeType} · {data.root.label}</Pill>
         ) : null}
       </div>
-      <h1 className="h-display mb-2 text-3xl font-semibold tracking-tight">Knowledge graph</h1>
+      <h1 className="h-display mb-2 text-3xl font-semibold tracking-tight">Cultural graph</h1>
       <p className="mb-6 text-sm text-ink-400">
-        {nodeCount} nodes · {edgeCount} edges · {hops}-hop neighborhood. Click any edge to see evidence.
+        {nodeCount} nodes · {edgeCount} edges · {hops}-hop neighborhood. Pick a mode to change what the graph surface shows.
       </p>
+
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        {([
+          { id: "story", label: "Story", desc: "Guided 2020 → COVID → songs → evidence" },
+          { id: "explorer", label: "Explorer", desc: "Free roam with jump anchors" },
+          { id: "evidence", label: "Evidence", desc: "Highlight edges with strong proof" },
+          { id: "weak", label: "Weak signals", desc: "Surface tentative connections" },
+          { id: "compare", label: "Compare", desc: "Two-year signal contrast" },
+        ] as { id: GraphMode; label: string; desc: string }[]).map((m) => (
+          <button
+            key={m.id}
+            onClick={() => setMode(m.id)}
+            className={`flex flex-col items-start rounded-xl border px-3 py-2 text-left transition ${
+              mode === m.id
+                ? "border-signal-400/40 bg-signal-500/15"
+                : "border-ink-800 bg-ink-950/60 hover:border-ink-700"
+            }`}
+            type="button"
+          >
+            <span className={`text-xs font-semibold ${mode === m.id ? "text-signal-100" : "text-ink-200"}`}>{m.label}</span>
+            <span className="text-[10px] text-ink-500">{m.desc}</span>
+          </button>
+        ))}
+      </div>
+
+      {mode === "story" ? (
+        <StoryPanel
+          step={Number(sp.get("storyStep") ?? "0")}
+          onStep={(step, route) => {
+            if (route) jumpTo(route, `story_step_${step}`, `Story step ${step + 1}.`);
+          }}
+        />
+      ) : null}
+
+      {mode === "compare" ? (
+        <ComparePanel onJump={(route) => jumpTo(route, "compare_opened", "Comparison view opened.")} />
+      ) : null}
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="mr-1">
@@ -340,7 +403,7 @@ export function GraphExplorer() {
               <GraphView
                 rootId={data.root.id}
                 nodes={data.nodes}
-                edges={data.edges as unknown as import("@/lib/types").GraphEdge[]}
+                edges={filterEdgesByMode(data.edges as unknown as import("@/lib/types").GraphEdge[], mode)}
                 onSelectEdge={(e) => onSelectEdge(e as unknown as GraphEdge)}
               />
             </div>
@@ -410,5 +473,134 @@ export function GraphExplorer() {
         />
       </section>
     </main>
+  );
+}
+
+function filterEdgesByMode(
+  edges: import("@/lib/types").GraphEdge[],
+  mode: GraphMode
+): import("@/lib/types").GraphEdge[] {
+  if (mode === "weak") {
+    return edges.filter((e) => (e.confidence ?? 0) < 0.45);
+  }
+  if (mode === "evidence") {
+    return edges.filter((e) => (e.confidence ?? 0) >= 0.6);
+  }
+  return edges;
+}
+
+const STORY_STEPS: { title: string; body: string; route: string }[] = [
+  {
+    title: "Start with 2020",
+    body: "The year COVID-19, BLM, and the US election all compressed into the charts.",
+    route: "/graph?mode=story&storyStep=0&rootType=year&rootId=versesignal:n:year:2020&hops=2",
+  },
+  {
+    title: "Open the COVID event",
+    body: "Move from the year to the pandemic event node and inspect its song edges.",
+    route: "/graph?mode=story&storyStep=1&rootType=event&rootId=versesignal:n:event:versesignal:ev:covid_19&hops=2",
+  },
+  {
+    title: "Find isolation",
+    body: "Look for the isolation / loneliness theme cluster that spiked during lockdowns.",
+    route: "/graph?mode=story&storyStep=2&rootType=theme&rootId=versesignal:n:theme:isolation&hops=2",
+  },
+  {
+    title: "See the songs",
+    body: "Drop into the song neighborhood to find the tracks that carried that theme.",
+    route: "/graph?mode=story&storyStep=3&rootType=theme&rootId=versesignal:n:theme:isolation&hops=2",
+  },
+  {
+    title: "Check evidence",
+    body: "Click any edge to open the evidence drawer and see direct lyric vs semantic vs temporal proof.",
+    route: "/graph?mode=evidence&rootType=event&rootId=versesignal:n:event:versesignal:ev:covid_19&hops=2",
+  },
+  {
+    title: "Compare regions",
+    body: "Jump to the globe to see whether the same mood showed up everywhere or fragmented by region.",
+    route: "/globe?year=2020&region=US",
+  },
+];
+
+function StoryPanel({
+  step,
+  onStep,
+}: {
+  step: number;
+  onStep: (step: number, route: string) => void;
+}) {
+  return (
+    <section className="mb-6 rounded-2xl border border-signal-500/30 bg-gradient-to-br from-signal-900/20 to-ink-950/60 p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-xs uppercase tracking-[0.26em] text-signal-300">Guided story</p>
+          <h2 className="mt-1 text-lg font-semibold text-ink-100">2020 → COVID → isolation → songs → evidence → regions</h2>
+        </div>
+        <span className="rounded-full border border-signal-500/30 bg-signal-500/15 px-3 py-1 text-xs text-signal-200">
+          Step {Math.min(step + 1, STORY_STEPS.length)} of {STORY_STEPS.length}
+        </span>
+      </div>
+      <ol className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {STORY_STEPS.map((s, i) => {
+          const active = i === step;
+          const done = i < step;
+          return (
+            <li key={i}>
+              <button
+                type="button"
+                onClick={() => onStep(i, s.route)}
+                className={`h-full w-full rounded-xl border p-3 text-left transition ${
+                  active
+                    ? "border-signal-400/40 bg-signal-500/15"
+                    : done
+                      ? "border-ink-700 bg-ink-900/40 opacity-70"
+                      : "border-ink-800 bg-ink-950/60 hover:border-ink-700"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold ${
+                      done ? "bg-emerald-500/20 text-emerald-300" : active ? "bg-signal-500/20 text-signal-300" : "bg-ink-800 text-ink-500"
+                    }`}
+                  >
+                    {done ? "✓" : i + 1}
+                  </span>
+                  <span className="text-sm font-medium text-ink-100">{s.title}</span>
+                </div>
+                <p className="mt-2 text-xs leading-5 text-ink-400">{s.body}</p>
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
+  );
+}
+
+function ComparePanel({ onJump }: { onJump: (route: string) => void }) {
+  return (
+    <section className="mb-6 rounded-2xl border border-echo-500/30 bg-gradient-to-br from-echo-900/20 to-ink-950/60 p-5">
+      <p className="text-xs uppercase tracking-[0.26em] text-echo-300">Compare mode</p>
+      <h2 className="mt-1 text-lg font-semibold text-ink-100">What changed between two years?</h2>
+      <p className="mt-2 text-sm text-ink-400">
+        Pick a baseline year and a target year. The graph will load the target year; use the lens page for side-by-side signal profiles.
+      </p>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => onJump("/compare/2019/2020")}
+          className="rounded-full bg-echo-500 px-4 py-2 text-xs font-semibold text-ink-950 transition hover:bg-echo-400"
+        >
+          2019 vs 2020
+        </button>
+        <button
+          type="button"
+          onClick={() => onJump("/compare/1969/2020")}
+          className="rounded-full border border-echo-500/40 px-4 py-2 text-xs font-semibold text-echo-200 transition hover:bg-echo-500/15"
+        >
+          1969 vs 2020
+        </button>
+      </div>
+    </section>
   );
 }

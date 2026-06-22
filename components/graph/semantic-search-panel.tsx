@@ -241,7 +241,7 @@ export function SemanticSearchPanel({ initialQuery = "", initialData = null }: S
                                     <span className="text-emerald-300">Direct lyric match</span>
                                   ) : (
                                     <>
-                                      Matched by {meta.label.toLowerCase()}
+                                      Matched by {meta.short}
                                       {concepts.length ? (
                                         <>
                                           {" "}· nearest concepts:{" "}
