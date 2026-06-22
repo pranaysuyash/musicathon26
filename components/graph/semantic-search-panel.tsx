@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
-import { ArrowRight, Search, Sparkles } from "lucide-react";
+import { ArrowRight, Search, Sparkles, BarChart3 } from "lucide-react";
 import { EvidenceBadge } from "@/components/evidence/evidence-badge";
 import type { UiEvidenceType } from "@/lib/evidence/types";
+import { UI_EVIDENCE_LABELS } from "@/lib/evidence/types";
 
 interface SemanticResult {
   songId: string;
@@ -14,6 +15,7 @@ interface SemanticResult {
   region: string;
   similarity: number;
   matchType?: UiEvidenceType;
+  matchedTerms?: string[];
 }
 
 interface SemanticSearchResponse {
@@ -103,6 +105,15 @@ export function SemanticSearchPanel({ initialQuery = "", initialData = null }: S
         weak_noisy: [],
         rejected: [],
       };
+
+  const queryConcepts = useMemo(() => {
+    if (!data?.query) return [];
+    return data.query
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, "")
+      .split(/\s+/)
+      .filter((w) => w.length > 2 && !["the", "and", "for", "with", "from", "into", "after", "through"].includes(w));
+  }, [data?.query]);
 
   return (
     <section className="relative overflow-hidden rounded-[2rem] border border-ink-800 bg-[linear-gradient(180deg,rgba(10,12,18,0.96),rgba(8,10,16,0.92))] p-5 lg:p-6">
@@ -196,7 +207,7 @@ export function SemanticSearchPanel({ initialQuery = "", initialData = null }: S
             </span>
           </div>
 
-          {data.results.length === 0 ? (
+              {data.results.length === 0 ? (
             <p className="mt-3 text-sm text-ink-400">No songs in the current region match this query.</p>
           ) : (
             <div className="mt-3 space-y-5">
@@ -207,32 +218,69 @@ export function SemanticSearchPanel({ initialQuery = "", initialData = null }: S
                     <span className="text-xs text-ink-500">{results.length} result{results.length === 1 ? "" : "s"}</span>
                   </div>
                   <ol className="space-y-2">
-                    {results.map((r, i) => (
-                      <li key={`${r.songId}-${i}`}>
-                        <Link
-                          href={`/song/${encodeURIComponent(r.songId)}`}
-                          className="group flex items-center justify-between gap-4 rounded-2xl border border-ink-800 bg-ink-950/45 px-4 py-3 transition hover:border-signal-400/40 hover:bg-ink-950/70"
-                        >
-                          <div className="flex min-w-0 items-center gap-3">
-                            <span className="text-xs uppercase tracking-[0.22em] text-ink-500">
-                              {String(i + 1).padStart(2, "0")}
-                            </span>
-                            <div className="min-w-0">
-                              <p className="truncate text-sm font-semibold text-ink-100">{r.title}</p>
-                              <p className="truncate text-xs text-ink-400">
-                                {r.artist} · {r.year} · {r.region}
-                              </p>
+                    {results.map((r, i) => {
+                      const concepts = r.matchedTerms?.length ? r.matchedTerms : queryConcepts;
+                      const isDirect = type === "direct_lyric";
+                      const meta = UI_EVIDENCE_LABELS[type as UiEvidenceType];
+                      return (
+                        <li key={`${r.songId}-${i}`}>
+                          <div className="flex flex-col gap-3 rounded-2xl border border-ink-800 bg-ink-950/45 px-4 py-3 transition hover:border-signal-400/40 hover:bg-ink-950/70 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex min-w-0 items-center gap-3">
+                              <span className="text-xs uppercase tracking-[0.22em] text-ink-500">
+                                {String(i + 1).padStart(2, "0")}
+                              </span>
+                              <div className="min-w-0">
+                                <Link href={`/song/${encodeURIComponent(r.songId)}`} className="block truncate text-sm font-semibold text-ink-100 hover:text-signal-300">
+                                  {r.title}
+                                </Link>
+                                <p className="truncate text-xs text-ink-400">
+                                  {r.artist} · {r.year} · {r.region}
+                                </p>
+                                <p className="mt-1.5 text-xs leading-5 text-ink-300">
+                                  {isDirect ? (
+                                    <span className="text-emerald-300">Direct lyric match</span>
+                                  ) : (
+                                    <>
+                                      Matched by {meta.label.toLowerCase()}
+                                      {concepts.length ? (
+                                        <>
+                                          {" "}· nearest concepts:{" "}
+                                          <span className="text-ink-200">{concepts.slice(0, 4).join(" · ")}</span>
+                                        </>
+                                      ) : null}
+                                      {type === "semantic_theme" ? (
+                                        <span className="ml-1.5 text-ink-500">(not a direct lyric match)</span>
+                                      ) : null}
+                                    </>
+                                  )}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Link
+                                href={`/song/${encodeURIComponent(r.songId)}`}
+                                className="inline-flex items-center gap-1 rounded-full border border-ink-800 bg-ink-950/60 px-2.5 py-1 text-[10px] font-medium text-ink-300 transition hover:border-signal-400/40 hover:text-signal-200"
+                              >
+                                Open song
+                              </Link>
+                              <Link
+                                href={`/lens/${r.year}?region=${encodeURIComponent(r.region)}`}
+                                className="inline-flex items-center gap-1 rounded-full border border-ink-800 bg-ink-950/60 px-2.5 py-1 text-[10px] font-medium text-ink-300 transition hover:border-echo-400/40 hover:text-echo-200"
+                              >
+                                <BarChart3 className="h-3 w-3" />
+                                Year lens
+                              </Link>
+                              <Link
+                                href={`/graph?rootType=song&rootId=${encodeURIComponent(r.songId)}&hops=2`}
+                                className="inline-flex items-center gap-1 rounded-full border border-ink-800 bg-ink-950/60 px-2.5 py-1 text-[10px] font-medium text-ink-300 transition hover:border-echo-400/40 hover:text-echo-200"
+                              >
+                                Graph
+                              </Link>
                             </div>
                           </div>
-                          <div className="flex items-center gap-3">
-                            <span className="font-mono text-sm text-signal-200">{r.similarity.toFixed(3)}</span>
-                            <span className="rounded-full bg-signal-500/15 px-2 py-0.5 text-[0.65rem] uppercase tracking-[0.22em] text-signal-200">
-                              cosine
-                            </span>
-                          </div>
-                        </Link>
-                      </li>
-                    ))}
+                        </li>
+                      );
+                    })}
                   </ol>
                 </div>
               ))}

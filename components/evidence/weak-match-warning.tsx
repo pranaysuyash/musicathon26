@@ -33,7 +33,7 @@ export function WeakMatchWarning({
       {isCovid ? "for COVID-19" : `for ${eventName ?? "this event"}`} on their own.
       {isCovid && strongCovidTerms.length === 0 ? (
         <span className="block mt-1 text-ink-400">
-          COVID-specific terms like "lockdown", "quarantine", or "pandemic" were not found.
+          COVID-specific terms like &quot;lockdown&quot;, &quot;quarantine&quot;, or &quot;pandemic&quot; were not found.
         </span>
       ) : null}
     </div>
