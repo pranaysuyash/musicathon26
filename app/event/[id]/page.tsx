@@ -20,7 +20,7 @@ import {
   deriveUiConfidence,
   buildCaveat,
 } from "@/lib/evidence/classifyEvidence";
-import type { SongEventConnection, UiEvidenceType } from "@/lib/evidence/types";
+import { UI_EVIDENCE_LABELS, type SongEventConnection, type UiEvidenceType } from "@/lib/evidence/types";
 
 export async function generateMetadata({
   params,
@@ -158,45 +158,25 @@ export default function EventPage({ params, searchParams }: { params: { id: stri
         }))}
       />
 
-      <section className="rounded-[2rem] border border-ink-800 bg-ink-950/60 p-5 lg:p-6">
-        <div className="mb-5">
-          <p className="text-xs uppercase tracking-[0.26em] text-ink-500">Evidence taxonomy</p>
-          <h2 className="h-display mt-2 text-2xl md:text-3xl">What kind of connection do you want to inspect?</h2>
-        </div>
-        <EvidenceTabs active={activeTab} counts={counts} onChange={() => {}} />
-        <p className="mt-4 text-sm leading-6 text-ink-400">
-          Tabs are rendered from the URL. Each filter shows only songs whose strongest evidence matches that category. Weak/noisy matches stay visible but are marked, not sold as proof.
-        </p>
-      </section>
+      {isCovid ? <CovidSkepticismPanel /> : null}
 
       <section className="rounded-[2rem] border border-ink-800 bg-ink-950/60 p-5 lg:p-6">
         <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="text-xs uppercase tracking-[0.26em] text-ink-500">Song matches</p>
+          <div className="max-w-2xl">
+            <p className="text-xs uppercase tracking-[0.26em] text-ink-500">Song matches by evidence class</p>
             <h2 className="h-display mt-2 text-2xl md:text-3xl">
-              {activeTab === "all" ? "All evidence classes" : `Only ${activeTab.replace("_", " ")}`}
+              {activeTab === "all" ? "All connections" : `${UI_EVIDENCE_LABELS[activeTab]} matches`}
             </h2>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {( ["all", "direct_lyric", "event_entity", "semantic_theme", "temporal_only", "weak_noisy"] as const).map((tab) => (
-              <Link
-                key={tab}
-                href={`/event/${encodeURIComponent(event.id)}${tab === "all" ? "" : `?tab=${tab}`}`}
-                className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
-                  activeTab === tab
-                    ? "border-signal-400/40 bg-signal-500/15 text-signal-100"
-                    : "border-ink-800 bg-ink-950/60 text-ink-300 hover:text-ink-200"
-                }`}
-              >
-                {tab === "all" ? "All" : tab.replace("_", " ")}
-              </Link>
-            ))}
+            <p className="mt-2 text-sm text-ink-400">
+              {counts.direct_lyric} direct lyric · {counts.event_entity} entity · {counts.semantic_theme} semantic · {counts.temporal_only} temporal · {counts.weak_noisy} weak/noisy · {counts.rejected} rejected
+            </p>
           </div>
         </div>
-        <EvidenceRankedSongList connections={filteredConnections} eventName={event.name} />
+        <EvidenceTabs active={activeTab} counts={counts} eventId={event.id} />
+        <div className="mt-5">
+          <EvidenceRankedSongList connections={filteredConnections} eventName={event.name} />
+        </div>
       </section>
-
-      {isCovid ? <CovidSkepticismPanel /> : null}
 
       <section className="grid gap-4 lg:grid-cols-2">
         <EventGraphPreview eventId={event.id} />

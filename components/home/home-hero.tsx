@@ -91,7 +91,7 @@ export function HomeHero({
           </div>
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr] xl:gap-5">
+        <div className="grid gap-4">
           <section className="relative overflow-hidden rounded-[2rem] border border-ink-800 bg-[linear-gradient(180deg,rgba(9,11,18,0.98),rgba(7,8,14,0.94))] p-5 shadow-[0_22px_80px_-48px_rgba(14,165,233,0.55)] lg:p-6">
             <div className="absolute inset-0">
               <div className="absolute -left-20 top-0 h-56 w-56 rounded-full bg-signal-500/12 blur-3xl" />
@@ -116,7 +116,7 @@ export function HomeHero({
             </div>
           </section>
 
-          <div className="grid gap-4">
+          <div className="grid gap-4 lg:grid-cols-2">
             <GraphPreviewPanel />
             <WorldLensPreview locale={locale} />
           </div>

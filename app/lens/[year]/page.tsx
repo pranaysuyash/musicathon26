@@ -178,8 +178,25 @@ export default async function LensPage({
           </div>
         ) : null}
 
-        <div className="mt-6">
+        <div className="mt-6 flex flex-wrap items-center gap-3">
           <TimelineScrubber years={allYears} currentYear={year} />
+        </div>
+
+        <div className="mt-6 grid gap-3 sm:grid-cols-2">
+          <Link
+            href={`/graph?rootType=year&rootId=versesignal:n:year:${year}`}
+            className="flex items-center justify-between rounded-2xl border border-signal-500/30 bg-signal-500/[0.06] p-4 text-sm font-medium text-signal-200 transition hover:bg-signal-500/[0.12]"
+          >
+            <span>Explore {year} as a graph</span>
+            <span>→</span>
+          </Link>
+          <Link
+            href={buildLangPath(`/globe?year=${year}&region=${region}`, locale)}
+            className="flex items-center justify-between rounded-2xl border border-echo-500/30 bg-echo-500/[0.06] p-4 text-sm font-medium text-echo-200 transition hover:bg-echo-500/[0.12]"
+          >
+            <span>See {year} on the world map</span>
+            <span>→</span>
+          </Link>
         </div>
       </header>
 
@@ -487,6 +504,20 @@ export default async function LensPage({
                 <p className="mt-2 text-xs text-ink-400 break-words">
                   {cl.signals.map((s) => `${s.type}:${s.signal}`).join(" + ")}
                 </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Link
+                    href={`/graph?rootType=year&rootId=versesignal:n:year:${year}`}
+                    className="text-xs font-medium text-signal-300 hover:text-signal-200"
+                  >
+                    Open in graph
+                  </Link>
+                  <Link
+                    href={buildLangPath(`/ask?q=${encodeURIComponent(`${year} ${cl.signals.map((s) => s.signal).join(" ")}`)}`, locale)}
+                    className="text-xs font-medium text-echo-300 hover:text-echo-200"
+                  >
+                    Ask about this cluster
+                  </Link>
+                </div>
                 {ctx ? (
                   <div className="mt-3 border-t border-ink-800 pt-3">
                     <p className="text-sm leading-relaxed text-ink-200">

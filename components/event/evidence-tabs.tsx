@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { cn } from "@/components/ui/primitives";
 import { UI_EVIDENCE_LABELS, type UiEvidenceType } from "@/lib/evidence/types";
 
@@ -14,14 +15,19 @@ const tabs: { id: UiEvidenceType | "all"; label: string; tone: string }[] = [
   { id: "rejected", label: "Rejected", tone: "bg-red-400" },
 ];
 
+function tabHref(eventId: string, tabId: UiEvidenceType | "all") {
+  const base = `/event/${encodeURIComponent(eventId)}`;
+  return tabId === "all" ? base : `${base}?tab=${tabId}`;
+}
+
 export function EvidenceTabs({
   active,
   counts,
-  onChange,
+  eventId,
 }: {
   active: UiEvidenceType | "all";
   counts: Record<UiEvidenceType | "all", number>;
-  onChange: (type: UiEvidenceType | "all") => void;
+  eventId: string;
 }) {
   return (
     <div className="flex flex-wrap gap-2">
@@ -29,9 +35,9 @@ export function EvidenceTabs({
         const count = counts[tab.id] ?? 0;
         const isActive = active === tab.id;
         return (
-          <button
+          <Link
             key={tab.id}
-            onClick={() => onChange(tab.id)}
+            href={tabHref(eventId, tab.id)}
             className={cn(
               "flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition",
               isActive
@@ -42,7 +48,7 @@ export function EvidenceTabs({
             <span className={cn("h-2 w-2 rounded-full", tab.tone)} />
             {tab.label}
             <span className="ml-1 rounded-full bg-ink-900 px-1.5 py-0.5 text-[10px] text-ink-400">{count}</span>
-          </button>
+          </Link>
         );
       })}
     </div>
