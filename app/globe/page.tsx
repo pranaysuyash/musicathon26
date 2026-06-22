@@ -250,18 +250,17 @@ export default function GlobePage({
       <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr] lg:items-end">
         <div className="max-w-3xl">
           <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-ink-800 bg-ink-950/55 px-4 py-2 text-[11px] uppercase tracking-[0.26em] text-ink-500">
+            <span>World Lens</span>
+            <span className="text-ink-700">·</span>
             <span>Signal-first globe</span>
             <span className="text-ink-700">·</span>
             <span>WebGL when available</span>
-            <span className="text-ink-700">·</span>
-            <span>fallback atlas when not</span>
           </div>
           <h1 className="h-display mt-5 text-4xl font-semibold tracking-tight text-balance md:text-6xl">
-            {t(locale, "globe.title")}
+            Was the world singing the same thing?
           </h1>
           <p className="mt-4 max-w-2xl text-sm leading-7 text-ink-300 md:text-base">
-            {t(locale, "globe.description")} The surface is meant to feel playable: signal intensity on one axis,
-            data availability on another, and candidate context only when the evidence earns it.
+            Compare signal intensity, top themes, and active contexts across regions. The same event can sound different in different places — or the same mood can show up everywhere at once.
           </p>
         </div>
 
@@ -286,26 +285,52 @@ export default function GlobePage({
 
       <section className="mt-8 grid gap-4 md:grid-cols-3">
         <div className="rounded-[1.6rem] border border-ink-800 bg-ink-950/55 p-5">
-          <p className="text-xs uppercase tracking-[0.24em] text-ink-500">Selected slice</p>
+          <p className="text-xs uppercase tracking-[0.24em] text-ink-500">Selected region</p>
           <h2 className="mt-2 text-xl font-semibold text-ink-100">{selectedCard?.label ?? "Regional slice"}</h2>
           <p className="mt-2 text-sm leading-6 text-ink-400">
             {selectedCard ? `${selectedCard.songCount} songs in ${selectedCard.latestYear ?? resolvedYear}.` : "No region selected yet."}
           </p>
-          <p className="mt-3 text-sm text-ink-300">
-            Top signal: <span className="text-ink-100">{selectedCard?.topSignal ?? "n/a"}</span>
-          </p>
+          {selectedCard ? (
+            <>
+              <p className="mt-3 text-sm text-ink-300">
+                Top mood: <span className="text-ink-100">{selectedCard.topSignal ?? "n/a"}</span>
+              </p>
+              <p className="mt-1 text-sm text-ink-300">
+                Top theme: <span className="text-ink-100">{selectedCard.topTheme ?? "n/a"}</span>
+              </p>
+              <p className="mt-1 text-sm text-ink-300">
+                Year drift: <span className={selectedCard.delta > 0 ? "text-emerald-300" : selectedCard.delta === 0 ? "text-ink-300" : "text-amber-300"}>{selectedCard.delta > 0 ? `+${selectedCard.delta}` : selectedCard.delta}</span> vs prior year
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Link
+                  href={buildLangPath(`/lens/${selectedCard.latestYear ?? resolvedYear}`, locale, { region: selectedCard.code })}
+                  className="text-xs font-medium text-signal-300 hover:text-signal-200"
+                >
+                  Open regional lens
+                </Link>
+                <Link
+                  href={buildLangPath(`/graph?rootType=region&rootId=versesignal:n:region:${selectedCard.code}&hops=2`, locale)}
+                  className="text-xs font-medium text-echo-300 hover:text-echo-200"
+                >
+                  Open region graph
+                </Link>
+              </div>
+            </>
+          ) : null}
         </div>
         <div className="rounded-[1.6rem] border border-ink-800 bg-ink-950/55 p-5">
-          <p className="text-xs uppercase tracking-[0.24em] text-ink-500">What to compare</p>
+          <p className="text-xs uppercase tracking-[0.24em] text-ink-500">Same event, different sound</p>
           <p className="mt-2 text-sm leading-6 text-ink-300">
-            Compare the hottest region against the least complete one. That contrast keeps the globe honest about
-            when it is seeing a real cultural signal and when it is simply seeing more data.
+            A global shock like COVID-19 or the 2020 protests appears in many regions, but the musical response varies — some regions lean into protest, others into isolation, others into escapism.
+          </p>
+          <p className="mt-3 text-sm leading-6 text-ink-300">
+            Compare two regions below to test whether the world was harmonizing or fragmenting.
           </p>
         </div>
         <div className="rounded-[1.6rem] border border-ink-800 bg-ink-950/55 p-5">
           <p className="text-xs uppercase tracking-[0.24em] text-ink-500">Next move</p>
           <p className="mt-2 text-sm leading-6 text-ink-300">
-            Open the region lens to test a candidate context or jump to the graph to inspect edges and evidence.
+            Open the regional lens to see candidate events, or jump to the graph to inspect cross-region edges and evidence strength.
           </p>
         </div>
       </section>
@@ -332,7 +357,14 @@ export default function GlobePage({
         <span className="ml-2 text-xs text-ink-500">Global timeline anchor has {allYears.length} active years</span>
       </section>
 
-      <section className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <section className="mt-8">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-500">Regional comparison grid</h2>
+        <p className="mt-2 max-w-3xl text-sm text-ink-300">
+          Each card shows what a region was sounding like in the selected year. Compare mood, theme, and event context side-by-side.
+        </p>
+      </section>
+
+      <section className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {regionCards
           .sort((a, b) => b.songCount - a.songCount || a.label.localeCompare(b.label))
           .map((item) => {
@@ -361,10 +393,10 @@ export default function GlobePage({
                   {t(locale, "common.events")}: <span className="text-ink-200">{item.eventCount}</span> active in {resolvedYear}
                 </p>
                 <p className="mt-1 text-xs text-ink-400">
-                  top theme: <span className="text-ink-200">{item.topTheme ?? "not enough data"}</span>
+                  top mood: <span className="text-ink-200">{item.topSignal ?? "not enough data"}</span>
                 </p>
                 <p className="mt-1 text-xs text-ink-400">
-                  top signal: <span className="text-ink-200">{item.topSignal ?? "n/a"}</span>
+                  top theme: <span className="text-ink-200">{item.topTheme ?? "n/a"}</span>
                 </p>
                 <p className="mt-1 text-xs text-ink-400">
                   year drift:
