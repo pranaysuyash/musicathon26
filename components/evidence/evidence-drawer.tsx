@@ -7,6 +7,8 @@ import type { GraphEdge, Evidence, EvidenceType } from "@/lib/types";
 import { getEvidenceSourceMeta } from "./source-registry";
 import { BecauseCard } from "./because-card";
 import { EvidencePreview, type EvidencePreviewItem } from "./evidence-preview";
+import { EvidenceBadgeRow } from "./evidence-badge";
+import { normalizeEvidence, deriveUiEvidenceType, deriveUiConfidence } from "@/lib/evidence/classifyEvidence";
 
 interface Props {
   edge: GraphEdge | null;
@@ -69,6 +71,20 @@ export function EvidenceDrawer({ edge, evidence, onClose }: Props) {
     grouped.get(key)!.push(e);
   }
 
+  const normalizedEvidence = evidence.map((e) => normalizeEvidence({
+    id: e.id,
+    edgeId: e.edgeId,
+    evidenceType: e.evidenceType,
+    value: e.value,
+    source: e.source,
+    confidence: e.confidence,
+  }));
+  const uiEvidenceType = deriveUiEvidenceType(
+    { inferenceType: edge.inferenceType, edgeType: edge.edgeType, matchedTerms: edge.matchedTerms },
+    normalizedEvidence
+  );
+  const uiConfidence = deriveUiConfidence(uiEvidenceType, edge.confidence, normalizedEvidence);
+
   const sources = Array.from(new Set(evidence.map((e) => e.source)));
   const sourceNames = sources.map((s) => getEvidenceSourceMeta(s).name);
   const rowItems = evidence.map<EvidencePreviewItem>((e) => ({
@@ -101,7 +117,10 @@ export function EvidenceDrawer({ edge, evidence, onClose }: Props) {
     >
       <div className="flex items-start justify-between">
         <div>
-          <Pill variant="signal">{edge.edgeType.replace(/_/g, " ")}</Pill>
+          <div className="flex items-center gap-2">
+            <Pill variant="signal">{edge.edgeType.replace(/_/g, " ")}</Pill>
+            <EvidenceBadgeRow type={uiEvidenceType} confidence={uiConfidence} />
+          </div>
           <h3 className="mt-3 text-sm font-semibold text-ink-100">Why this connection exists</h3>
         </div>
         <button

@@ -5,17 +5,19 @@ import { GraphExplorer } from "@/components/graph/graph-explorer";
 export const metadata: Metadata = {
   title: "Knowledge graph",
   description:
-    "Explore the VerseSignal knowledge graph across the long-term corpus target (1960s–2023), including era nodes, year lenses, and cross-era comparison paths.",
+    "Explore the VerseSignal knowledge graph: songs, events, themes, moods, entities, and evidence across 1960–2023.",
   openGraph: {
     images: [
       {
-        url: "/api/og?type=graph&title=VerseSignal%20Graph&subtitle=Explore%20songs%2C%20artists%2C%20events%2C%20themes%20and%20moods%20through%20the%20knowledge%20graph",
+        url: "/api/og?type=graph&title=VerseSignal%20Graph",
         width: 1200,
         height: 630,
       },
     ],
   },
 };
+
+export const dynamic = "force-dynamic";
 
 export default function GraphPage() {
   return (

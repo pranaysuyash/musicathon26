@@ -38,7 +38,8 @@ export function GraphPreviewPanel() {
         </Link>
       </div>
 
-      <div className="relative mt-5 aspect-[16/9] overflow-hidden rounded-[1.6rem] border border-ink-800 bg-ink-900/40">
+      <div className="relative mt-5 aspect-[16/10] overflow-hidden rounded-[1.6rem] border border-ink-800 bg-[radial-gradient(circle_at_top,rgba(56,189,248,0.12),rgba(3,7,18,0.96))]">
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(148,163,184,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[size:20px_20px] opacity-30" />
         <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full">
           {edges.map(([from, to]) => {
             const a = nodes.find((n) => n.id === from)!;
@@ -66,7 +67,7 @@ export function GraphPreviewPanel() {
             return (
               <g key={n.id}>
                 <circle cx={n.x} cy={n.y} r="3.8" fill={colors[n.tone]} />
-                <circle cx={n.x} cy={n.y} r="7" fill="none" stroke={colors[n.tone]} opacity="0.22" />
+                <circle cx={n.x} cy={n.y} r="7" fill="none" stroke={colors[n.tone]} opacity="0.28" />
                 <text
                   x={n.x}
                   y={n.y - 7}
@@ -83,7 +84,7 @@ export function GraphPreviewPanel() {
       </div>
 
       <p className="mt-4 text-sm leading-6 text-ink-400">
-        The graph connects songs, events, themes, and evidence. Click any edge to see why the connection exists and why it may be weak.
+        Songs, events, themes, and evidence stay on one surface. Open an edge for the why.
       </p>
     </section>
   );

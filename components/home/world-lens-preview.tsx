@@ -25,20 +25,46 @@ export function WorldLensPreview({ locale }: { locale: string }) {
         </Link>
       </div>
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-2">
-        {regions.map((region) => (
-          <div
-            key={region.code}
-            className="rounded-[1.4rem] border border-ink-800 bg-ink-950/55 p-4"
-          >
-            <div className="flex items-center gap-2">
-              <Globe className="h-4 w-4 text-signal-300" />
-              <span className="text-sm font-medium text-ink-100">{region.label}</span>
+      <div className="mt-5 overflow-hidden rounded-[1.6rem] border border-ink-800 bg-ink-950/45 p-4">
+        <div className="relative mx-auto mb-4 aspect-square w-full max-w-[240px]">
+          <div className="absolute inset-0 rounded-full border border-signal-400/20 bg-[radial-gradient(circle_at_50%_35%,rgba(56,189,248,0.18),rgba(10,12,18,0.92)_58%,rgba(2,6,23,0.98))]" />
+          <div className="absolute inset-[11%] rounded-full border border-ink-700/70" />
+          <div className="absolute inset-[24%] rounded-full border border-ink-700/50" />
+          <div className="absolute left-1/2 top-[11%] h-[78%] w-px -translate-x-1/2 bg-gradient-to-b from-transparent via-signal-300/40 to-transparent" />
+          <div className="absolute left-[11%] top-1/2 h-px w-[78%] -translate-y-1/2 bg-gradient-to-r from-transparent via-signal-300/40 to-transparent" />
+          {[
+            { label: "US", left: "24%", top: "34%", tone: "bg-signal-400" },
+            { label: "IN", left: "67%", top: "39%", tone: "bg-echo-400" },
+            { label: "UK", left: "51%", top: "28%", tone: "bg-amber-300" },
+            { label: "GLOBAL", left: "50%", top: "66%", tone: "bg-emerald-400" },
+          ].map((node) => (
+            <div key={node.label} className="absolute" style={{ left: node.left, top: node.top }}>
+              <div className={`h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full ${node.tone} shadow-[0_0_20px_currentColor]`} />
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] uppercase tracking-[0.22em] text-ink-300">
+                {node.label}
+              </div>
             </div>
-            <p className="mt-2 text-sm leading-6 text-ink-300">{region.mood}</p>
-            <p className="mt-1 text-xs text-ink-500">{region.event}</p>
+          ))}
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full border border-ink-700 bg-ink-950/75 px-3 py-1 text-[10px] uppercase tracking-[0.22em] text-ink-400">
+            Was the world singing the same thing?
           </div>
-        ))}
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          {regions.map((region) => (
+            <div
+              key={region.code}
+              className="rounded-[1.2rem] border border-ink-800 bg-ink-950/55 p-4"
+            >
+              <div className="flex items-center gap-2">
+                <Globe className="h-4 w-4 text-signal-300" />
+                <span className="text-sm font-medium text-ink-100">{region.label}</span>
+              </div>
+              <p className="mt-2 text-sm leading-6 text-ink-300">{region.mood}</p>
+              <p className="mt-1 text-xs text-ink-500">{region.event}</p>
+            </div>
+          ))}
+        </div>
       </div>
     </section>
   );
