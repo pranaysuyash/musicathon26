@@ -1,10 +1,26 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { getEventById, getSongsForEvent, getAllEvents, getEventSignalDecay, getEventLeadAnalysis, getEventArticles, REGION_LABELS } from "@/lib/db/queries";
+import { getEventById, getAllEvents, getSongsForEvent, getEventSignalDecay, getEventLeadAnalysis, getEventArticles, REGION_LABELS } from "@/lib/db/queries";
 import { t, resolveLocale } from "@/lib/i18n/strings";
-import { BecauseCard } from "@/components/evidence/because-card";
-import type { EvidencePreviewItem } from "@/components/evidence/evidence-preview";
+import { initDb } from "@/lib/db";
+import { Pill, SectionTitle } from "@/components/ui/primitives";
+import { StoryNextStep } from "@/components/story/story-next-step";
+import { THEME_LABELS, THEME_COLORS } from "@/lib/nlp/theme-scoring";
+import type { Theme } from "@/lib/types";
+import { EventHero } from "@/components/event/event-hero";
+import { EvidenceTabs } from "@/components/event/evidence-tabs";
+import { EvidenceRankedSongList } from "@/components/event/evidence-ranked-song-list";
+import { CovidSkepticismPanel } from "@/components/evidence/weak-match-warning";
+import { EventGraphPreview } from "@/components/event/event-graph-preview";
+import { WorldResponsePanel } from "@/components/event/world-response";
+import {
+  normalizeEvidence,
+  deriveUiEvidenceType,
+  deriveUiConfidence,
+  buildCaveat,
+} from "@/lib/evidence/classifyEvidence";
+import type { SongEventConnection, UiEvidenceType } from "@/lib/evidence/types";
 
 export async function generateMetadata({
   params,
@@ -24,6 +40,7 @@ export async function generateMetadata({
     },
   };
 }
+
 function decodeRouteParam(value: string): string {
   try {
     return decodeURIComponent(value);
@@ -32,20 +49,9 @@ function decodeRouteParam(value: string): string {
   }
 }
 
-import { initDb } from "@/lib/db";
-import { ConfidenceBar, Pill, SectionTitle } from "@/components/ui/primitives";
-import { StoryNextStep } from "@/components/story/story-next-step";
-import { THEME_LABELS, THEME_COLORS } from "@/lib/nlp/theme-scoring";
-import type { Theme } from "@/lib/types";
-
 export const dynamic = "force-dynamic";
 
-interface PageProps {
-  params: { id: string };
-  searchParams: { lang?: string };
-}
-
-export default function EventPage({ params, searchParams }: PageProps) {
+export default function EventPage({ params, searchParams }: { params: { id: string }; searchParams: { lang?: string; tab?: UiEvidenceType } }) {
   const locale = resolveLocale(searchParams.lang);
   initDb();
   const id = decodeRouteParam(params.id);
@@ -72,269 +78,132 @@ export default function EventPage({ params, searchParams }: PageProps) {
   const decay = getEventSignalDecay(event.id);
   const lead = getEventLeadAnalysis(event.id);
   const articles = getEventArticles(event.id);
-  const linkedSources = Array.from(
-    new Set(["billboard", ...linked.flatMap((row) => [row.edge.sourceApi, ...row.evidence.map((e) => e.source)])])
-  );
-  const linkedConfidence = linked.length > 0
-    ? linked.reduce((sum, row) => sum + row.edge.confidence, 0) / linked.length
-    : 0;
-  const linkedEvidenceRows = linked
-    .flatMap((row) =>
-      row.evidence.slice(0, 1).map((e) => ({
-        id: `${row.songId}:${e.id}`,
-        title: e.evidenceType.replace(/_/g, " "),
-        text: e.value,
-        source: e.source,
-        confidence: e.confidence,
-        matchedTerms: row.edge.matchedTerms,
-      } as EvidencePreviewItem))
-    )
-    .slice(0, 4);
-  const leadRate = lead ? Math.round(lead.leadSignalRate * 100) : null;
-  const directEvidenceCount = linked.length;
-  const linkedSpotlight = linked.slice(0, 6);
-  const decayMini = decay.slice(0, 6);
+  const isCovid = event.name.toLowerCase().includes("covid");
 
-  // Per motto 0.1, an event page should answer "is this event
-  // backed by chart evidence, and how did the chart react?" — not
-  // just "how many songs linked?" We compose the narrative from
-  // linked count, decay, and pre-event lead so the card has the
-  // same shape as the theme page.
-  const eventWhyReasons: string[] = [
-    `${linked.length} song${linked.length === 1 ? "" : "s"} cleared the direct lyric threshold for this event.`,
-  ];
-  if (linked.length > 0) {
-    eventWhyReasons.push(
-      `Average edge confidence: ${(linkedConfidence * 100).toFixed(0)}%.`
+  const connections: SongEventConnection[] = linked.map((row) => {
+    const evidence = row.evidence.map((ev) =>
+      normalizeEvidence({
+        id: ev.id,
+        edgeId: ev.edgeId,
+        evidenceType: ev.evidenceType,
+        value: ev.value,
+        source: ev.source,
+        confidence: ev.confidence,
+      })
     );
-  } else {
-    eventWhyReasons.push(
-      "No direct lyric links are currently above the threshold — the event is not named in the chart songs."
+    const matchedTerms = row.edge.matchedTerms ?? evidence.flatMap((e) => e.matchedTerms ?? []);
+    const uiEvidenceType = deriveUiEvidenceType(
+      {
+        inferenceType: row.edge.inferenceType,
+        edgeType: row.edge.edgeType,
+        matchedTerms,
+      },
+      evidence
     );
-  }
-  eventWhyReasons.push(
-    `Temporal window: ${event.startDate} to ${event.endDate ?? "present"}.`
-  );
-  // Pre-event resonance: the most interesting story
-  if (lead && lead.totalCorrelatedSignals > 0) {
-    if ((leadRate ?? 0) >= 30) {
-      eventWhyReasons.push(
-        `Pre-event resonance: ${leadRate}% of the signals correlated with this event were already elevated in ${lead.preEventYear}.`
-      );
-    } else if (lead.preElevatedSignals > 0) {
-      eventWhyReasons.push(
-        `Pre-event shift was mixed: ${lead.preElevatedSignals} signal(s) elevated in ${lead.preEventYear} but moved in the opposite direction during the event.`
-      );
-    } else {
-      eventWhyReasons.push(
-        `No pre-event signal shift detected in ${lead.preEventYear} — the chart reacted synchronously with the event.`
-      );
-    }
+    const uiConfidence = deriveUiConfidence(uiEvidenceType, row.edge.confidence, evidence);
+    const caveat = buildCaveat(uiEvidenceType, uiConfidence, matchedTerms);
+
+    return {
+      songId: row.songId,
+      songTitle: row.title,
+      songArtist: row.artist,
+      songYear: row.year,
+      eventId: event.id,
+      eventName: event.name,
+      edgeId: row.edge.id,
+      edgeWeight: row.edge.weight,
+      edgeConfidence: row.edge.confidence,
+      inferenceType: row.edge.inferenceType,
+      uiEvidenceType,
+      uiConfidence,
+      explanation: row.edge.explanation ?? "Graph-derived song-event relationship.",
+      caveat,
+      evidence,
+      matchedTerms,
+    };
+  });
+
+  const activeTab: UiEvidenceType | "all" = searchParams.tab ?? "all";
+  const filteredConnections =
+    activeTab === "all"
+      ? connections
+      : connections.filter((c) => c.uiEvidenceType === activeTab);
+
+  const counts: Record<UiEvidenceType | "all", number> = {
+    all: connections.length,
+    direct_lyric: 0,
+    event_entity: 0,
+    semantic_theme: 0,
+    temporal_only: 0,
+    external_confirmation: 0,
+    weak_noisy: 0,
+    rejected: 0,
+  };
+  for (const c of connections) {
+    counts[c.uiEvidenceType]++;
   }
 
   return (
-    <main className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8 lg:py-8">
-      <Link href="/" className="text-xs uppercase tracking-[0.26em] text-ink-400 hover:text-ink-200">
-        ← VerseSignal
-      </Link>
+    <main className="mx-auto max-w-7xl space-y-8 px-4 py-6 sm:px-6 lg:px-8 lg:py-10">
+      <EventHero
+        name={event.name}
+        category={event.category}
+        startDate={event.startDate}
+        endDate={event.endDate}
+        regions={event.regions.map((r) => REGION_LABELS[r] ?? r)}
+        description={event.description}
+        relatedThemes={event.relatedThemes.map((theme) => ({
+          label: THEME_LABELS[theme as Theme] ?? theme,
+          color: THEME_COLORS[theme as Theme] ?? "#94a3b8",
+        }))}
+      />
 
-      <section className="mt-4 overflow-hidden rounded-[2.5rem] border border-ink-800 bg-[linear-gradient(145deg,rgba(9,11,18,0.98),rgba(7,8,14,0.92))] px-5 py-6 shadow-[0_0_0_1px_rgba(255,255,255,0.02),0_42px_120px_-60px_rgba(14,165,233,0.45)] sm:px-6 lg:px-8 lg:py-8">
-        <div className="pointer-events-none absolute inset-0">
-          <div className="absolute left-[-6rem] top-0 h-72 w-72 rounded-full bg-signal-500/12 blur-3xl" />
-          <div className="absolute right-[-6rem] top-20 h-80 w-80 rounded-full bg-echo-500/12 blur-3xl" />
-          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-signal-300/40 to-transparent" />
+      <section className="rounded-[2rem] border border-ink-800 bg-ink-950/60 p-5 lg:p-6">
+        <div className="mb-5">
+          <p className="text-xs uppercase tracking-[0.26em] text-ink-500">Evidence taxonomy</p>
+          <h2 className="h-display mt-2 text-2xl md:text-3xl">What kind of connection do you want to inspect?</h2>
         </div>
-        <div className="relative grid gap-8 xl:grid-cols-[1.08fr_0.92fr] xl:items-start">
-          <div className="max-w-3xl">
-            <div className="flex flex-wrap items-center gap-2">
-              <Pill variant="echo">Event Lens</Pill>
-              <Pill variant="mute">{event.category}</Pill>
-              <Pill variant="mute">{event.startDate} → {event.endDate ?? "present"}</Pill>
-              <Pill variant="warn">evidence trial</Pill>
-            </div>
-            <h1 className="h-display mt-5 text-4xl leading-[0.95] text-balance text-ink-50 md:text-5xl lg:text-6xl">
-              {event.name}
-            </h1>
-            <p className="mt-4 max-w-2xl text-sm leading-7 text-pretty text-ink-300 md:text-base">
-              {event.description} Start by checking the strongest direct songs, then compare them against the weaker signal classes so the page stays skeptical.
-            </p>
-            <div className="mt-5 flex flex-wrap gap-2">
-              {event.regions.map((r) => (
-                <Pill key={r} variant="mute">
-                  {REGION_LABELS[r] ?? r}
-                </Pill>
-              ))}
-              {event.relatedThemes.map((theme) => (
-                <Link
-                  key={theme}
-                  href={`/theme/${theme}`}
-                  className="pill hover:opacity-80"
-                  style={{
-                    borderColor: `${THEME_COLORS[theme as Theme] ?? "#94a3b8"}55`,
-                    background: `${THEME_COLORS[theme as Theme] ?? "#94a3b8"}11`,
-                    color: THEME_COLORS[theme as Theme] ?? "#94a3b8",
-                  }}
-                >
-                  {THEME_LABELS[theme as Theme] ?? theme}
-                </Link>
-              ))}
-            </div>
-            <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {[
-                { label: "direct", value: String(directEvidenceCount), color: "bg-signal-400" },
-                { label: "lead rate", value: leadRate !== null ? `${leadRate}%` : "n/a", color: "bg-emerald-400" },
-                { label: "decay", value: `${decay.length}`, color: "bg-amber-400" },
-                { label: "articles", value: String(articles.length), color: "bg-ink-400" },
-              ].map((stat) => (
-                <div key={stat.label} className="rounded-[1.4rem] border border-ink-800 bg-ink-950/55 p-4">
-                  <p className="text-[10px] uppercase tracking-[0.24em] text-ink-500">{stat.label}</p>
-                  <p className="mt-2 text-3xl font-semibold tracking-tight text-ink-50">{stat.value}</p>
-                  <div className="mt-3 h-1 rounded-full bg-ink-900">
-                    <div className={`h-full rounded-full ${stat.color}`} style={{ width: stat.label === "lead rate" && leadRate !== null ? `${leadRate}%` : stat.label === "decay" ? `${Math.min(100, decay.length * 18)}%` : `${Math.min(100, Math.max(20, directEvidenceCount * 18))}%` }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <div className="rounded-[2rem] border border-ink-800 bg-ink-950/65 p-5">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-[10px] uppercase tracking-[0.26em] text-ink-500">evidence taxonomy</p>
-                <Pill variant={linked.length > 0 ? "signal" : "warn"}>{linked.length > 0 ? "live" : "empty"}</Pill>
-              </div>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                {[
-                  { label: "Direct", value: "named in lyrics", tone: "signal" },
-                  { label: "Temporal", value: "same-year resonance", tone: "echo" },
-                  { label: "Echo", value: "theme or mood alignment", tone: "mute" },
-                  { label: "Reject", value: "too weak to call", tone: "warn" },
-                ].map((tier) => (
-                  <div key={tier.label} className="rounded-[1.4rem] border border-ink-800 bg-ink-900/50 p-4">
-                    <p className="text-[10px] uppercase tracking-[0.24em] text-ink-500">{tier.label}</p>
-                    <p className="mt-2 text-sm leading-6 text-ink-300">{tier.value}</p>
-                    <div className="mt-3 h-1 rounded-full bg-ink-900">
-                      <div className={`h-full rounded-full ${tier.tone === "signal" ? "bg-signal-400" : tier.tone === "echo" ? "bg-emerald-400" : tier.tone === "warn" ? "bg-amber-400" : "bg-ink-500"}`} style={{ width: tier.label === "Reject" ? "28%" : tier.label === "Temporal" ? "68%" : "84%" }} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="rounded-[2rem] border border-ink-800 bg-ink-950/60 p-5">
-              <p className="text-[10px] uppercase tracking-[0.26em] text-ink-500">timeline strip</p>
-              <div className="mt-4 flex items-end gap-2">
-                {decayMini.length > 0 ? (
-                  decayMini.map((d) => (
-                    <div key={d.year} className="flex-1">
-                      <div className="flex h-28 items-end gap-1 rounded-2xl border border-ink-800 bg-ink-900/50 px-2 py-2">
-                        {Object.entries(d.postureCounts)
-                          .sort(([, a], [, b]) => b - a)
-                          .slice(0, 4)
-                          .map(([posture, count]) => (
-                            <div
-                              key={posture}
-                              className="flex-1 rounded-t-md bg-signal-400/70"
-                              style={{ height: `${Math.max(18, count * 18)}%` }}
-                              title={`${posture}: ${count}`}
-                            />
-                          ))}
-                      </div>
-                      <p className="mt-2 text-center text-[10px] text-ink-500">{d.year}</p>
-                    </div>
-                  ))
-                ) : (
-                  <div className="rounded-[1.4rem] border border-dashed border-ink-800 bg-ink-900/30 p-4 text-sm text-ink-500">
-                    No decay data yet.
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
+        <EvidenceTabs active={activeTab} counts={counts} onChange={() => {}} />
+        <p className="mt-4 text-sm leading-6 text-ink-400">
+          Tabs are rendered from the URL. Each filter shows only songs whose strongest evidence matches that category. Weak/noisy matches stay visible but are marked, not sold as proof.
+        </p>
       </section>
 
-      <section className="mt-8 grid gap-4 xl:grid-cols-[1.02fr_0.98fr]">
-        <div className="rounded-[2rem] border border-ink-800 bg-ink-950/60 p-5 lg:p-6">
-          <SectionTitle subtitle="The strongest songs rise first, then the edge evidence tells you why.">Song matches</SectionTitle>
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            {linkedSpotlight.length === 0 ? (
-              <div className="rounded-[1.4rem] border border-dashed border-ink-800 bg-ink-900/30 p-5 text-sm text-ink-500">
-                No songs in this corpus mention the event by name. That absence is still useful signal.
-              </div>
-            ) : (
-              linkedSpotlight.map((row) => (
-                <div key={row.edge.id} className="rounded-[1.4rem] border border-ink-800 bg-ink-900/55 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <Link href={`/song/${encodeURIComponent(row.songId)}`} className="block truncate text-sm font-medium text-ink-100 hover:text-signal-300">
-                        {row.title}
-                      </Link>
-                      <div className="mt-1 flex items-center gap-2 text-xs text-ink-400">
-                        <span>{row.artist}</span>
-                        <span>·</span>
-                        <span>{row.year}</span>
-                      </div>
-                    </div>
-                    <Pill variant={row.evidence.length > 0 ? "signal" : "warn"}>{row.evidence.length} rows</Pill>
-                  </div>
-                  <div className="mt-3">
-                    <ConfidenceBar value={row.edge.weight} />
-                    <div className="mt-2 flex items-center justify-between text-xs text-ink-500">
-                      <span>{(row.edge.confidence * 100).toFixed(0)}% confidence</span>
-                      <span>{(row.edge.weight * 100).toFixed(0)}% weight</span>
-                    </div>
-                  </div>
-                  <p className="mt-3 text-sm leading-6 text-ink-300">
-                    {row.edge.explanation ?? "Graph-derived relationship with stored evidence."}
-                  </p>
-                </div>
-              ))
-            )}
+      <section className="rounded-[2rem] border border-ink-800 bg-ink-950/60 p-5 lg:p-6">
+        <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.26em] text-ink-500">Song matches</p>
+            <h2 className="h-display mt-2 text-2xl md:text-3xl">
+              {activeTab === "all" ? "All evidence classes" : `Only ${activeTab.replace("_", " ")}`}
+            </h2>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {( ["all", "direct_lyric", "event_entity", "semantic_theme", "temporal_only", "weak_noisy"] as const).map((tab) => (
+              <Link
+                key={tab}
+                href={`/event/${encodeURIComponent(event.id)}${tab === "all" ? "" : `?tab=${tab}`}`}
+                className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                  activeTab === tab
+                    ? "border-signal-400/40 bg-signal-500/15 text-signal-100"
+                    : "border-ink-800 bg-ink-950/60 text-ink-300 hover:text-ink-200"
+                }`}
+              >
+                {tab === "all" ? "All" : tab.replace("_", " ")}
+              </Link>
+            ))}
           </div>
         </div>
-
-        <div className="rounded-[2rem] border border-ink-800 bg-ink-950/60 p-5 lg:p-6">
-          <SectionTitle subtitle="This is the part that should feel like discovery, not documentation.">Why it connects</SectionTitle>
-          <div className="mt-4 space-y-3">
-            {linkedSpotlight.length === 0 ? (
-              <p className="text-sm text-ink-500">No edge evidence is available yet.</p>
-            ) : (
-              linkedSpotlight.map((row) => {
-                const evidenceRows = row.evidence.map<EvidencePreviewItem>((ev) => ({
-                  id: ev.id,
-                  title: ev.evidenceType.replace(/_/g, " "),
-                  text: ev.value,
-                  source: ev.source,
-                  confidence: ev.confidence,
-                  matchedTerms: ev.evidenceType === "matched_term" ? [ev.value] : [],
-                }));
-                return (
-                  <div key={row.edge.id} className="rounded-[1.4rem] border border-ink-800 bg-ink-900/55 p-4">
-                    <BecauseCard
-                      claim={`${row.title} → ${event.name}`}
-                      reasons={[
-                        row.edge.explanation ?? "Connection is inferred from song-event linkage.",
-                        `Weight ${(row.edge.weight * 100).toFixed(0)}%.`,
-                        `Confidence ${(row.edge.confidence * 100).toFixed(0)}%.`,
-                      ]}
-                      confidence={row.edge.confidence}
-                      provenanceSources={Array.from(new Set([row.edge.sourceApi, ...row.evidence.map((e) => e.source)]))}
-                      evidenceRows={evidenceRows}
-                      evidencePreviewTitle="Representative evidence"
-                      caveat={row.evidence.length > 0
-                        ? "This is the edge trail, not a claim of intent."
-                        : "No expanded evidence rows are stored for this edge yet."}
-                      inferenceType={row.edge.inferenceType}
-                    />
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
+        <EvidenceRankedSongList connections={filteredConnections} eventName={event.name} />
       </section>
 
-      <section className="mt-8 grid gap-4 xl:grid-cols-[0.92fr_1.08fr]">
+      {isCovid ? <CovidSkepticismPanel /> : null}
+
+      <section className="grid gap-4 lg:grid-cols-2">
+        <EventGraphPreview eventId={event.id} />
+        <WorldResponsePanel regions={event.regions.map((r) => REGION_LABELS[r] ?? r)} />
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-2">
         <div className="rounded-[2rem] border border-ink-800 bg-ink-950/60 p-5 lg:p-6">
           <SectionTitle subtitle="Signals already elevated before the event stay visible.">Before / during / after</SectionTitle>
           {lead && lead.leadSignals.length > 0 ? (
@@ -347,80 +216,26 @@ export default function EventPage({ params, searchParams }: PageProps) {
                   <span className="text-xs text-ink-500">pre{s.delta > 0 ? "+" : ""}{s.delta.toFixed(1)}</span>
                 </div>
               ))}
-              <p className="mt-3 text-xs text-ink-500">
-                {leadRate !== null ? `${leadRate}% of correlated signals were already elevated before ${event.name}.` : "No pre-event signal window was available."}
-              </p>
             </div>
           ) : (
-            <div className="mt-4 rounded-[1.4rem] border border-dashed border-ink-800 bg-ink-900/30 p-5 text-sm text-ink-500">
-              No pre-event shift detected.
-            </div>
+            <div className="mt-4 rounded-[1.4rem] border border-dashed border-ink-800 bg-ink-900/30 p-5 text-sm text-ink-500">No pre-event shift detected.</div>
           )}
         </div>
 
         <div className="rounded-[2rem] border border-ink-800 bg-ink-950/60 p-5 lg:p-6">
           <SectionTitle subtitle="Curated background material for the event.">Context articles</SectionTitle>
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <div className="mt-4 grid gap-3">
             {articles.length === 0 ? (
-              <div className="rounded-[1.4rem] border border-dashed border-ink-800 bg-ink-900/30 p-5 text-sm text-ink-500">
-                No context articles are attached yet.
-              </div>
+              <div className="rounded-[1.4rem] border border-dashed border-ink-800 bg-ink-900/30 p-5 text-sm text-ink-500">No context articles are attached yet.</div>
             ) : (
               articles.slice(0, 4).map((article) => (
                 <article key={article.id} className="rounded-[1.4rem] border border-ink-800 bg-ink-900/50 p-4">
                   <p className="text-[10px] uppercase tracking-[0.24em] text-ink-500">{article.source}</p>
-                  <a href={article.sourceUrl} target="_blank" rel="noreferrer" className="mt-2 block text-sm font-medium text-ink-100 hover:text-signal-300">
-                    {article.title}
-                  </a>
+                  <a href={article.sourceUrl} target="_blank" rel="noreferrer" className="mt-2 block text-sm font-medium text-ink-100 hover:text-signal-300">{article.title}</a>
                   {article.summary ? <p className="mt-2 text-sm leading-6 text-ink-400 line-clamp-3">{article.summary}</p> : null}
                 </article>
               ))
             )}
-          </div>
-        </div>
-      </section>
-
-      <section className="mt-8">
-        <BecauseCard
-          claim={`${event.name} signal trial`}
-          reasons={eventWhyReasons}
-          confidence={linked.length > 0 ? linkedConfidence : 0.35}
-          provenanceSources={linkedSources}
-          evidenceRows={linkedEvidenceRows}
-          evidencePreviewTitle="Representative evidence"
-          caveat="This page surfaces stored edge-level evidence. It is the same evidence used in the graph edge trail, inline here."
-          inferenceType={linked.length > 0 ? linked[0].edge.inferenceType : "hybrid"}
-        />
-      </section>
-      <section>
-        <SectionTitle subtitle="The event lens should feel like a control room, not a paper trail.">
-          Graph / articles / next step
-        </SectionTitle>
-        <div className="grid gap-4 lg:grid-cols-[1fr_0.92fr]">
-          <div className="rounded-[2rem] border border-ink-800 bg-ink-950/60 p-5 lg:p-6">
-            <div className="flex flex-wrap items-center gap-3">
-              <Link
-                href={`/graph?rootType=event&rootId=versesignal:n:event:${event.id}`}
-                className="rounded-full bg-signal-500 px-5 py-2.5 text-sm font-medium text-ink-950 transition hover:bg-signal-400"
-              >
-                Open in meaning graph →
-              </Link>
-              <Link
-                href={`/event/${encodeURIComponent(event.id)}/articles${locale !== "en" ? `?lang=${locale}` : ""}`}
-                className="rounded-full border border-ink-700 bg-ink-900/60 px-5 py-2.5 text-sm font-medium text-ink-100 transition hover:border-ink-600 hover:bg-ink-800"
-              >
-                {t(locale, "event.articles")}
-              </Link>
-            </div>
-            <p className="mt-4 text-sm leading-6 text-ink-400">
-              The graph centers this event node and shows the song, theme, and evidence bridges around it.
-            </p>
-          </div>
-          <div className="rounded-[2rem] border border-ink-800 bg-ink-950/60 p-5 lg:p-6">
-            <p className="text-[10px] uppercase tracking-[0.26em] text-ink-500">signal caveat</p>
-            <p className="mt-3 text-sm leading-6 text-ink-300">
-              Direct lyric matches, pre-event lead, and post-event decay are separated on purpose. Weak matches stay in the taxonomy instead of being sold as proof.
-            </p>
           </div>
         </div>
       </section>
