@@ -200,6 +200,68 @@ export default async function LensPage({
         </div>
       </header>
 
+      {/* Song-led investigation sequence */}
+      <section className="mb-10">
+        <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.26em] text-ink-500">Start with the song</p>
+            <h2 className="h-display mt-2 text-2xl md:text-3xl">Songs causing the strongest signal</h2>
+          </div>
+          <Link
+            href={`/graph?rootType=year&rootId=versesignal:n:year:${year}`}
+            className="text-sm font-medium text-signal-300 hover:text-signal-200"
+          >
+            Open {year} graph →
+          </Link>
+        </div>
+        <ol className="card divide-y divide-ink-800/60">
+          {songs.slice(0, 12).map((s) => (
+            <li key={s.id} className="flex items-center gap-3 p-3 text-sm">
+              <span className="w-6 text-right font-semibold tabular-nums text-ink-500">
+                {s.chartRank}
+              </span>
+              <Link
+                href={`/song/${encodeURIComponent(s.id)}`}
+                className="flex-1 truncate text-ink-100 hover:text-signal-300"
+              >
+                {s.title}{" "}
+                <span className="text-ink-500">— {s.artist}</span>
+              </Link>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      {/* Candidate events + evidence quality */}
+      {events.length > 0 ? (
+        <section className="mb-10">
+          <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.26em] text-ink-500">Test candidate explanations</p>
+              <h2 className="h-display mt-2 text-2xl md:text-3xl">Which events could explain the signal?</h2>
+            </div>
+          </div>
+          <p className="mb-4 text-sm text-ink-400">
+            {events.length} candidate explanation(s) overlap {year}. Click one to inspect direct, semantic, temporal, and weak evidence.
+          </p>
+          <ul className="grid gap-3 md:grid-cols-2">
+            {events.map((ev) => (
+              <li key={ev.id} className="card p-4 hover:border-ink-600">
+                <Link href={`/event/${encodeURIComponent(ev.id)}`} className="block">
+                  <div className="flex items-center gap-2">
+                    <Pill variant="echo">{ev.category}</Pill>
+                    <h3 className="font-medium text-ink-100">{ev.name}</h3>
+                  </div>
+                  <p className="mt-1 text-xs text-ink-400">
+                    {ev.startDate} – {ev.endDate ?? "ongoing"}
+                  </p>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       <section className="mb-10">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-ink-500">
           {t(locale, "lens.voice-title")}
