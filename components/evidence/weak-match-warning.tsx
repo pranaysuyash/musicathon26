@@ -44,22 +44,26 @@ export function CovidSkepticismPanel({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "rounded-[2rem] border border-ink-800 bg-ink-950/60 p-5 lg:p-6",
+        "rounded-[2rem] border border-amber-500/30 bg-gradient-to-br from-amber-950/40 to-ink-950/60 p-5 lg:p-6",
         className
       )}
     >
-      <h3 className="text-lg font-semibold tracking-tight text-ink-50">
-        COVID evidence rules
-      </h3>
-      <p className="mt-2 text-sm leading-6 text-ink-400">
-        COVID connections are separated into direct references, lockdown vocabulary, isolation themes, temporal matches, and weak/noisy matches. A generic word is not proof.
-      </p>
+      <div className="flex flex-wrap items-start gap-4">
+        <div className="flex-1">
+          <h3 className="text-lg font-semibold tracking-tight text-ink-50">
+            COVID evidence rules
+          </h3>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-ink-300">
+            We do not count generic words as COVID proof. A song about “streets” or “being alone” is not a pandemic song unless stronger vocabulary also appears. Use the tabs below to separate direct references from thematic, temporal, and weak matches.
+          </p>
+        </div>
+      </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+      <div className="mt-5 grid gap-4 sm:grid-cols-2">
         <div className="rounded-2xl border border-emerald-700/30 bg-emerald-900/10 p-4">
-          <p className="text-xs uppercase tracking-[0.22em] text-emerald-300">Counts as COVID signal</p>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {COVID_STRONG_TERMS.slice(0, 8).map((term) => (
+          <p className="text-xs uppercase tracking-[0.22em] text-emerald-300">Strong COVID evidence</p>
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {COVID_STRONG_TERMS.map((term) => (
               <span
                 key={term}
                 className="rounded-full border border-emerald-700/30 bg-emerald-900/20 px-2 py-0.5 text-xs text-emerald-100"
@@ -72,17 +76,15 @@ export function CovidSkepticismPanel({ className }: { className?: string }) {
 
         <div className="rounded-2xl border border-red-700/30 bg-red-900/10 p-4">
           <p className="text-xs uppercase tracking-[0.22em] text-red-300">Not proof by itself</p>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {["street", "city", "home", "night", "fear", "AI", "alone", "distance"].map(
-              (term) => (
-                <span
-                  key={term}
-                  className="rounded-full border border-red-700/30 bg-red-900/20 px-2 py-0.5 text-xs text-red-100"
-                >
-                  {term}
-                </span>
-              )
-            )}
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {GENERIC_NOISE_TERMS.map((term) => (
+              <span
+                key={term}
+                className="rounded-full border border-red-700/30 bg-red-900/20 px-2 py-0.5 text-xs text-red-100"
+              >
+                {term}
+              </span>
+            ))}
           </div>
         </div>
       </div>
