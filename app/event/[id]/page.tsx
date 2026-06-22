@@ -82,14 +82,17 @@ export default function EventPage({ params, searchParams }: { params: { id: stri
 
   const connections: SongEventConnection[] = linked.map((row) => {
     const evidence = row.evidence.map((ev) =>
-      normalizeEvidence({
-        id: ev.id,
-        edgeId: ev.edgeId,
-        evidenceType: ev.evidenceType,
-        value: ev.value,
-        source: ev.source,
-        confidence: ev.confidence,
-      })
+      normalizeEvidence(
+        {
+          id: ev.id,
+          edgeId: ev.edgeId,
+          evidenceType: ev.evidenceType,
+          value: ev.value,
+          source: ev.source,
+          confidence: ev.confidence,
+        },
+        event.id
+      )
     );
     const matchedTerms = row.edge.matchedTerms ?? evidence.flatMap((e) => e.matchedTerms ?? []);
     const uiEvidenceType = deriveUiEvidenceType(
@@ -98,10 +101,11 @@ export default function EventPage({ params, searchParams }: { params: { id: stri
         edgeType: row.edge.edgeType,
         matchedTerms,
       },
-      evidence
+      evidence,
+      event.id
     );
     const uiConfidence = deriveUiConfidence(uiEvidenceType, row.edge.confidence, evidence);
-    const caveat = buildCaveat(uiEvidenceType, uiConfidence, matchedTerms);
+    const caveat = buildCaveat(uiEvidenceType, uiConfidence, matchedTerms, event.id);
 
     return {
       songId: row.songId,

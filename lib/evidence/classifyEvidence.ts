@@ -5,6 +5,8 @@ import {
   type NormalizedEvidence,
   GENERIC_NOISE_TERMS,
   COVID_STRONG_TERMS,
+  getEventStrongTerms,
+  getEventWeakTerms,
 } from "./types";
 
 const DIRECT_LYRIC_DB_TYPES: DbEvidenceType[] = ["lyric_term", "lyric_line", "matched_term"];
@@ -35,27 +37,57 @@ const SEMANTIC_INFERENCE_TYPES: InferenceType[] = [
 const TEMPORAL_INFERENCE_TYPES: InferenceType[] = ["temporal_alignment"];
 const CURATED_INFERENCE_TYPES: InferenceType[] = ["curated_event_alignment", "manual_curation"];
 
+function tokenSet(text: string): Set<string> {
+  return new Set(
+    text
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .filter(Boolean)
+  );
+}
+
+function phraseIncluded(text: string, phrase: string): boolean {
+  const normalized = text.toLowerCase().replace(/[^a-z0-9\s]/g, " ");
+  // For multi-word phrases, check as a substring with word boundaries via spaces.
+  if (phrase.includes(" ")) {
+    const p = ` ${phrase} `;
+    return ` ${normalized} `.includes(p);
+  }
+  return tokenSet(normalized).has(phrase.toLowerCase());
+}
+
 function hasGenericNoiseTerm(text: string): boolean {
-  const lower = text.toLowerCase();
-  return GENERIC_NOISE_TERMS.some((term) => lower.includes(term));
+  return GENERIC_NOISE_TERMS.some((term) => phraseIncluded(text, term));
 }
 
 function hasCovidStrongTerm(text: string): boolean {
-  const lower = text.toLowerCase();
-  return COVID_STRONG_TERMS.some((term) => lower.includes(term));
+  return COVID_STRONG_TERMS.some((term) => phraseIncluded(text, term));
 }
 
 function isOnlyGenericNoise(text: string): boolean {
   return hasGenericNoiseTerm(text) && !hasCovidStrongTerm(text);
 }
 
-export function classifyDbEvidenceType(dbType: DbEvidenceType, value: string): UiEvidenceType {
+export function hasEventStrongTerm(eventId: string, text: string): boolean {
+  return getEventStrongTerms(eventId).some((term) => phraseIncluded(text, term));
+}
+
+export function hasEventWeakTerm(eventId: string, text: string): boolean {
+  return getEventWeakTerms(eventId).some((term) => phraseIncluded(text, term));
+}
+
+export function isOnlyEventWeakTerm(eventId: string, text: string): boolean {
+  return hasEventWeakTerm(eventId, text) && !hasEventStrongTerm(eventId, text);
+}
+
+export function classifyDbEvidenceType(dbType: DbEvidenceType, value: string, eventId?: string): UiEvidenceType {
   if (DIRECT_LYRIC_DB_TYPES.includes(dbType)) {
-    if (isOnlyGenericNoise(value)) return "weak_noisy";
+    if (eventId ? isOnlyEventWeakTerm(eventId, value) : isOnlyGenericNoise(value)) return "weak_noisy";
     return "direct_lyric";
   }
   if (ENTITY_DB_TYPES.includes(dbType)) {
-    if (isOnlyGenericNoise(value)) return "weak_noisy";
+    if (eventId ? isOnlyEventWeakTerm(eventId, value) : isOnlyGenericNoise(value)) return "weak_noisy";
     return "event_entity";
   }
   if (EXTERNAL_DB_TYPES.includes(dbType)) return "external_confirmation";
@@ -73,20 +105,23 @@ export function classifyInferenceType(inferenceType: InferenceType | null | unde
   return "weak_noisy";
 }
 
-export function normalizeEvidence(evidence: {
-  id: string;
-  edgeId: string;
-  evidenceType: DbEvidenceType;
-  value: string;
-  source: string;
-  confidence: number;
-  matchedTerms?: string[];
-}): NormalizedEvidence {
+export function normalizeEvidence(
+  evidence: {
+    id: string;
+    edgeId: string;
+    evidenceType: DbEvidenceType;
+    value: string;
+    source: string;
+    confidence: number;
+    matchedTerms?: string[];
+  },
+  eventId?: string
+): NormalizedEvidence {
   return {
     id: evidence.id,
     edgeId: evidence.edgeId,
     dbType: evidence.evidenceType,
-    uiType: classifyDbEvidenceType(evidence.evidenceType, evidence.value),
+    uiType: classifyDbEvidenceType(evidence.evidenceType, evidence.value, eventId),
     value: evidence.value,
     source: evidence.source,
     confidence: evidence.confidence,
@@ -100,7 +135,8 @@ export function deriveUiEvidenceType(
     edgeType?: string;
     matchedTerms?: string[];
   },
-  evidence: NormalizedEvidence[]
+  evidence: NormalizedEvidence[],
+  eventId?: string
 ): UiEvidenceType {
   // Curated/manual edges are external confirmation.
   if (edge.inferenceType && CURATED_INFERENCE_TYPES.includes(edge.inferenceType)) {
@@ -167,7 +203,8 @@ export function deriveUiConfidence(
 export function buildCaveat(
   uiEvidenceType: UiEvidenceType,
   uiConfidence: UiConfidence,
-  matchedTerms: string[]
+  matchedTerms: string[],
+  eventId?: string
 ): string {
   switch (uiEvidenceType) {
     case "direct_lyric":
@@ -180,14 +217,15 @@ export function buildCaveat(
       return "The song was popular during the event window, but the lyrics do not directly reference the event.";
     case "external_confirmation":
       return "A curated or external source supports this connection.";
-    case "weak_noisy":
-      if (matchedTerms.some((t) => GENERIC_NOISE_TERMS.includes(t.toLowerCase()))) {
-        return `Generic terms like "${matchedTerms
-          .filter((t) => GENERIC_NOISE_TERMS.includes(t.toLowerCase()))
-          .slice(0, 2)
-          .join(" and ")}" are not proof on their own.`;
+    case "weak_noisy": {
+      const weakTerms = matchedTerms.filter((t) =>
+        (eventId ? getEventWeakTerms(eventId) : GENERIC_NOISE_TERMS).includes(t.toLowerCase())
+      );
+      if (weakTerms.length) {
+        return `Generic terms like "${weakTerms.slice(0, 2).join(" and ")}" are not proof on their own.`;
       }
       return "Weak or noisy evidence; do not treat as proof.";
+    }
     case "rejected":
       return "Explicitly excluded from claims.";
     default:
@@ -195,32 +233,38 @@ export function buildCaveat(
   }
 }
 
-export function classifyCovidConnection(
+export function classifyEventConnection(
+  eventId: string,
   text: string,
   evidenceTypes: UiEvidenceType[]
 ): { uiType: UiEvidenceType; caveat: string } {
-  const lower = text.toLowerCase();
-  const hasStrong = COVID_STRONG_TERMS.some((term) => lower.includes(term));
-  const hasOnlyGeneric =
-    GENERIC_NOISE_TERMS.some((term) => lower.includes(term)) && !hasStrong;
+  const strong = hasEventStrongTerm(eventId, text);
+  const weak = hasEventWeakTerm(eventId, text);
 
-  if (hasOnlyGeneric) {
+  if (weak && !strong) {
     return {
       uiType: "weak_noisy",
-      caveat:
-        "Generic words like 'street', 'home', or 'alone' are not COVID evidence without stronger event vocabulary.",
+      caveat: "Generic or common terms are not event proof without stronger event vocabulary.",
     };
   }
 
-  if (hasStrong) {
+  if (strong) {
     return {
       uiType: evidenceTypes.includes("direct_lyric") ? "direct_lyric" : "event_entity",
-      caveat: "COVID-specific vocabulary present.",
+      caveat: "Event-specific vocabulary present.",
     };
   }
 
   return {
     uiType: "temporal_only",
-    caveat: "Song was popular during the COVID window; no direct COVID reference detected.",
+    caveat: "Song was popular during the event window; no direct event reference detected.",
   };
+}
+
+/** @deprecated Use classifyEventConnection with the event id. */
+export function classifyCovidConnection(
+  text: string,
+  evidenceTypes: UiEvidenceType[]
+): { uiType: UiEvidenceType; caveat: string } {
+  return classifyEventConnection("versesignal:ev:covid_19", text, evidenceTypes);
 }

@@ -160,3 +160,62 @@ export const COVID_STRONG_TERMS = [
   "travel ban",
   "second wave",
 ];
+
+/** Event-specific strong vocabularies. Add more events here as they are curated. */
+export const EVENT_STRONG_TERMS: Record<string, string[]> = {
+  "versesignal:ev:covid_19": COVID_STRONG_TERMS,
+  "versesignal:ev:ukraine_war": [
+    "ukraine",
+    "kyiv",
+    "kiev",
+    "russia",
+    "putin",
+    "war",
+    "invasion",
+    "refugee",
+    "refugees",
+    "soldier",
+    "soldiers",
+    "tank",
+    "tanks",
+    "bomb",
+    "bombs",
+    "missile",
+    "missiles",
+    "sanctions",
+    "nato",
+  ],
+  "versesignal:ev:blm_2020": [
+    "black lives",
+    "blm",
+    "george floyd",
+    "breonna taylor",
+    "protest",
+    "protests",
+    "protesting",
+    "riot",
+    "riots",
+    "police",
+    "cop",
+    "cops",
+    "racism",
+    "racist",
+    "justice",
+    "equality",
+    "march",
+    "marching",
+  ],
+};
+
+/** Terms considered generic noise for specific events (override defaults if needed). */
+export const EVENT_WEAK_TERMS: Record<string, string[]> = {
+  "versesignal:ev:covid_19": GENERIC_NOISE_TERMS,
+};
+
+export function getEventStrongTerms(eventId: string): string[] {
+  return EVENT_STRONG_TERMS[eventId] ?? [];
+}
+
+export function getEventWeakTerms(eventId: string): string[] {
+  return EVENT_WEAK_TERMS[eventId] ?? GENERIC_NOISE_TERMS;
+}
